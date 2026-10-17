@@ -26,6 +26,7 @@ struct DriverPanel: View {
     let world: DriverWorld
     let model: ParkingModel
     let showGuide: Bool
+    let paint: CarPaint
 
     private var reversing: Bool { model.gear < 0 }
 
@@ -55,7 +56,7 @@ struct DriverPanel: View {
                         radar
                     }
                     Spacer()
-                    ParkingCanvas(model: model, showGuide: showGuide, carView: true)
+                    ParkingCanvas(model: model, showGuide: showGuide, paint: paint, carView: true)
                         .frame(width: 128, height: 128)
                         .clipShape(RoundedRectangle(cornerRadius: 14))
                         .overlay(RoundedRectangle(cornerRadius: 14).stroke(.white.opacity(0.5), lineWidth: 1))

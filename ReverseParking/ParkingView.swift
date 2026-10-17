@@ -13,6 +13,7 @@ struct ParkingView: View {
     @State private var wheelAngle = 0.0
     @State private var pressing = false
     @State private var showGuide = true
+    @AppStorage("paint") private var paint = CarPaint.pearl
     @State private var showHelp = false
     @Environment(\.scenePhase) private var phase
     @Environment(\.dismiss) private var dismiss
@@ -34,9 +35,9 @@ struct ParkingView: View {
             topBar
             Group {
                 if mode == .driver {
-                    DriverPanel(world: world, model: model, showGuide: showGuide)
+                    DriverPanel(world: world, model: model, showGuide: showGuide, paint: paint)
                 } else {
-                    ParkingCanvas(model: model, showGuide: showGuide)
+                    ParkingCanvas(model: model, showGuide: showGuide, paint: paint)
                 }
             }
             .clipShape(RoundedRectangle(cornerRadius: 18))
@@ -56,7 +57,7 @@ struct ParkingView: View {
         .toolbar(.hidden, for: .navigationBar)
         .onAppear {
             UIApplication.shared.isIdleTimerDisabled = true
-            if mode == .driver { world.update(model, showGuide: showGuide) }
+            if mode == .driver { world.update(model, showGuide: showGuide, paint: paint) }
         }
         .onDisappear { UIApplication.shared.isIdleTimerDisabled = false }
         .onChange(of: scenario) { restart() }
@@ -66,7 +67,7 @@ struct ParkingView: View {
             model.steering = wheelAngle / Self.maxWheel
             model.driving = model.gear != 0 && pressing && !showHelp
             model.step(1.0 / 60)
-            if mode == .driver { world.update(model, showGuide: showGuide) }
+            if mode == .driver { world.update(model, showGuide: showGuide, paint: paint) }
         }
     }
 
@@ -154,6 +155,19 @@ struct ParkingView: View {
     private var help: some View {
         NavigationStack {
             List {
+                Section("车漆") {
+                    Picker("车漆", selection: $paint) {
+                        ForEach(CarPaint.allCases) { item in
+                            Label { Text(item.name) } icon: {
+                                Image(systemName: "circle.fill").foregroundStyle(item.color)
+                            }
+                            .tag(item)
+                        }
+                    }
+                    .pickerStyle(.inline)
+                    .labelsHidden()
+                }
+                Section("怎么练") {
                 Text("Hold 模式：按住左边电门车才走，松开立即停住。")
                 Text("左手拇指管电门，右手拇指转方向盘。")
                 Text("手指按住方向盘转圈，或在上面左右划。左右各转 3/4 圈打满。")
@@ -162,8 +176,9 @@ struct ParkingView: View {
                 Text("驾驶视角：挂 R 自动切倒车影像，红黄绿线分别是 0.5、1、2 米。后视镜在 R 挡会自动下压。")
                 Text("右下角小图以车为中心、车头朝上，左下角是离障碍物最近的距离。")
                 Text("车完全进绿色车位、车身摆正后停车，就算成功。")
+                }
             }
-            .navigationTitle("怎么练")
+            .navigationTitle("设置与说明")
             .toolbar { Button("知道了") { showHelp = false } }
         }
         .presentationDetents([.medium])
@@ -242,6 +257,7 @@ struct SteeringWheel: View {
 struct ParkingCanvas: View {
     let model: ParkingModel
     let showGuide: Bool
+    var paint = CarPaint.pearl
     var carView = false
     static let home = Vector(x: 12, y: 9)
     static let visibleWidth = 19.0
@@ -286,7 +302,7 @@ struct ParkingCanvas: View {
             }
             let l = model.layout
             let asphalt = Color(red: 0.11, green: 0.12, blue: 0.14)
-            let paint = Color.white.opacity(0.85)
+            let lineColor = Color.white.opacity(0.85)
             let lot = rect(Box(x: 0, y: 0, width: 24, height: 16))
             context.fill(Path(lot), with: .color(asphalt))
             context.stroke(Path(lot), with: .color(.yellow.opacity(0.6)), lineWidth: 3)
@@ -314,18 +330,17 @@ struct ParkingCanvas: View {
                 outline.addLine(to: point(Vector(x: b.x, y: b.y + b.height)))
                 outline.addLine(to: point(Vector(x: b.x + b.width, y: b.y + b.height)))
                 outline.addLine(to: point(Vector(x: b.x + b.width, y: b.y)))
-                context.stroke(outline, with: .color(paint), lineWidth: 2)
+                context.stroke(outline, with: .color(lineColor), lineWidth: 2)
             }
             if l.aisleEdge > 1 {
                 let edge = l.aisleEdge
                 context.fill(Path(rect(Box(x: min(0, l.leftEdge), y: 0, width: max(24, l.rightEdge) - min(0, l.leftEdge), height: edge))),
                              with: .color(Color(red: 0.2, green: 0.21, blue: 0.24)))
                 context.stroke(line(Vector(x: min(0, l.leftEdge), y: edge), Vector(x: max(24, l.rightEdge), y: edge)),
-                               with: .color(paint), lineWidth: 2)
-                for x in stride(from: 1.0, through: 21.0, by: 3.2) {
-                    context.fill(Path(roundedRect: rect(Box(x: x + 0.7, y: edge - 2.9, width: 1.8, height: 2.6)),
-                                      cornerRadius: scale * 0.4),
-                                 with: .color(Color(white: 0.45)))
+                               with: .color(lineColor), lineWidth: 2)
+                for (i, x) in stride(from: 1.0, through: 21.0, by: 3.2).enumerated() {
+                    drawSedan(context, at: point(Vector(x: x + 1.6, y: edge - 2.4)), heading: .pi / 2, scale: scale,
+                              paint: [Color(white: 0.4), Color(white: 0.85), Color(red: 0.25, green: 0.3, blue: 0.4)][i % 3])
                 }
             } else {
                 context.stroke(line(Vector(x: 1, y: 3.5), Vector(x: 23, y: 3.5)),
@@ -333,8 +348,11 @@ struct ParkingCanvas: View {
                                style: StrokeStyle(lineWidth: 2, dash: [14, 12]))
             }
 
-            for b in l.cars {
-                context.fill(Path(roundedRect: rect(b), cornerRadius: scale * 0.4), with: .color(Color(white: 0.45)))
+            let parkedPaint: [Color] = [Color(white: 0.55), Color(red: 0.45, green: 0.32, blue: 0.22), Color(white: 0.9),
+                                        Color(white: 0.3), Color(red: 0.2, green: 0.35, blue: 0.6)]
+            for (i, b) in l.cars.enumerated() {
+                drawSedan(context, at: point(Vector(x: b.x + b.width / 2, y: b.y + b.height / 2)),
+                          heading: b.height > b.width ? -.pi / 2 : 0, scale: scale, paint: parkedPaint[i % parkedPaint.count])
             }
             for b in l.pillars {
                 context.fill(Path(rect(b)), with: .color(Color(white: 0.75)))
@@ -357,29 +375,9 @@ struct ParkingCanvas: View {
             }
 
             let p = model.pose
-            let body = model.won ? Color.green : model.collision ? Color.red : Color.cyan
-            context.fill(polygon(ParkingModel.corners(p)), with: .color(body))
-            var car = context
-            let c = point(Vector(x: p.x, y: p.y))
-            car.translateBy(x: c.x, y: c.y)
-            car.rotate(by: .radians(p.heading))
-            car.fill(Path(roundedRect: CGRect(x: 0.2 * scale, y: -0.66 * scale,
-                                              width: 0.8 * scale, height: 1.32 * scale), cornerRadius: 3),
-                     with: .color(.black.opacity(0.6)))
-            car.fill(Path(roundedRect: CGRect(x: -1.6 * scale, y: -0.6 * scale,
-                                              width: 0.5 * scale, height: 1.2 * scale), cornerRadius: 3),
-                     with: .color(.black.opacity(0.4)))
-            for y in [-0.75, 0.6] {
-                car.fill(Path(CGRect(x: -2.1 * scale, y: y * scale, width: 0.15 * scale, height: 0.15 * scale)),
-                         with: .color(model.gear < 0 ? .white : .red))
-            }
-            for y in [-1.0, 1.0] {
-                var wheel = car
-                wheel.translateBy(x: 1.2 * scale, y: y * scale)
-                wheel.rotate(by: .radians(model.steering * .pi / 5))
-                wheel.fill(Path(CGRect(x: -0.35 * scale, y: -0.12 * scale,
-                                       width: 0.7 * scale, height: 0.24 * scale)), with: .color(.white))
-            }
+            drawSedan(context, at: point(Vector(x: p.x, y: p.y)), heading: p.heading, scale: scale,
+                      paint: paint.color, steering: model.steering, reversing: model.gear < 0,
+                      outline: model.won ? .green : model.collision ? .red : nil)
         }
         .accessibilityLabel("倒车入库俯视练习场")
     }

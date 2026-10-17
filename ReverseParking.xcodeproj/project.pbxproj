@@ -12,6 +12,7 @@
 		00000000000000000000000E /* ParkingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000004 /* ParkingView.swift */; };
 		00000000000000000000000F /* DriverWorld.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000005 /* DriverWorld.swift */; };
 		000000000000000000000010 /* DriverView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000006 /* DriverView.swift */; };
+		000000000000000000000011 /* CarStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000007 /* CarStyle.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -20,6 +21,7 @@
 		000000000000000000000004 /* ParkingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParkingView.swift; sourceTree = "<group>"; };
 		000000000000000000000005 /* DriverWorld.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriverWorld.swift; sourceTree = "<group>"; };
 		000000000000000000000006 /* DriverView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriverView.swift; sourceTree = "<group>"; };
+		000000000000000000000007 /* CarStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarStyle.swift; sourceTree = "<group>"; };
 		A00000000000000000000006 /* ReverseParking.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ReverseParking.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -48,6 +50,7 @@
 				000000000000000000000001 /* ReverseParkingApp.swift */,
 				000000000000000000000002 /* ParkingModel.swift */,
 				000000000000000000000004 /* ParkingView.swift */,
+				000000000000000000000007 /* CarStyle.swift */,
 				000000000000000000000006 /* DriverView.swift */,
 				000000000000000000000005 /* DriverWorld.swift */,
 			);
@@ -116,6 +119,7 @@
 				00000000000000000000000B /* ReverseParkingApp.swift in Sources */,
 				00000000000000000000000C /* ParkingModel.swift in Sources */,
 				00000000000000000000000E /* ParkingView.swift in Sources */,
+				000000000000000000000011 /* CarStyle.swift in Sources */,
 				000000000000000000000010 /* DriverView.swift in Sources */,
 				00000000000000000000000F /* DriverWorld.swift in Sources */,
 			);

@@ -20,6 +20,10 @@ The home screen has two modes. They share scenarios, gears, pedal and wheel.
   - In R the main view switches to a backup camera, mirrored like a real one, with 0.5 / 1 / 2 m lines and the predicted path.
   - In R both mirrors tilt down to show the bay lines.
 
+The cars are drawn as a Model 3 style sedan (top view in 2D, extruded side profile in 3D) with a glass roof,
+light bar and turning front wheels. Pick the paint in the ? sheet; it is saved between launches.
+No logos or brand names are used.
+
 ## How to play
 
 - Portrait. Pick R, P or D.

@@ -8,8 +8,8 @@ final class DriverWorld {
     let rearCam: SCNNode
     let leftMirror: SCNNode
     let rightMirror: SCNNode
-    private let car = SCNNode()
-    private let bodyMaterial = SCNMaterial()
+    private let own: Sedan
+    private let car: SCNNode
     private let staticRoot = SCNNode()
     private var trackNodes: [SCNNode] = []
     private var builtLayout: Layout?
@@ -18,6 +18,9 @@ final class DriverWorld {
     private static let rearMarkMask = 4
 
     init() {
+        let sedan = Sedan(paint: CarPaint.pearl.uiColor, interior: true)
+        own = sedan
+        car = sedan.node
         scene.background.contents = UIColor(red: 0.62, green: 0.72, blue: 0.82, alpha: 1)
         let ambient = SCNNode()
         ambient.light = SCNLight()
@@ -32,13 +35,6 @@ final class DriverWorld {
         scene.rootNode.addChildNode(sun)
         scene.rootNode.addChildNode(staticRoot)
 
-        bodyMaterial.diffuse.contents = UIColor.systemCyan
-        let body = SCNNode(geometry: SCNBox(width: 4.2, height: 0.8, length: 1.8, chamferRadius: 0.12))
-        body.geometry?.materials = [bodyMaterial]
-        body.position = SCNVector3(0, 0.5, 0)
-        car.addChildNode(body)
-        car.addChildNode(Self.box(2.2, 0.5, 1.6, UIColor(white: 0.12, alpha: 1), at: SCNVector3(-0.2, 1.15, 0)))
-        car.addChildNode(Self.box(0.6, 0.1, 1.7, UIColor(white: 0.2, alpha: 1), at: SCNVector3(0.65, 0.93, 0)))
         scene.rootNode.addChildNode(car)
 
         driverCam = Self.camera(on: car, at: SCNVector3(0.1, 1.25, -0.4), yaw: -.pi / 2, pitch: -0.1,
@@ -69,7 +65,7 @@ final class DriverWorld {
         }
     }
 
-    func update(_ model: ParkingModel, showGuide: Bool) {
+    func update(_ model: ParkingModel, showGuide: Bool, paint: CarPaint) {
         if model.layout != builtLayout {
             builtLayout = model.layout
             buildLot(model.layout)
@@ -78,7 +74,10 @@ final class DriverWorld {
         let p = model.pose
         car.position = SCNVector3(Float(p.x), 0, Float(p.y))
         car.eulerAngles.y = Float(-p.heading)
-        bodyMaterial.diffuse.contents = model.won ? UIColor.systemGreen : model.collision ? UIColor.systemRed : UIColor.systemCyan
+        own.bodyMaterial.diffuse.contents = paint.uiColor
+        own.bodyMaterial.emission.contents = model.won ? UIColor.systemGreen.withAlphaComponent(0.35)
+            : model.collision ? UIColor.systemRed.withAlphaComponent(0.45) : UIColor.black
+        own.steer(model.steering)
 
         let dip: Float = model.gear < 0 ? -0.24 : -0.08
         leftMirror.eulerAngles.x = dip
@@ -128,7 +127,9 @@ final class DriverWorld {
         add(Self.box(t.width - 0.2, 0.005, t.height - 0.2, UIColor.systemGreen.withAlphaComponent(0.35),
                      at: SCNVector3(Float(t.x + t.width / 2), 0.006, Float(t.y + t.height / 2))))
 
-        let colors: [UIColor] = [.systemGray, .systemBrown, .white, .darkGray, .systemBlue, .systemGray2, .black, .systemRed]
+        let colors: [UIColor] = [UIColor(white: 0.55, alpha: 1), UIColor(red: 0.45, green: 0.32, blue: 0.22, alpha: 1), .white,
+                                 UIColor(white: 0.25, alpha: 1), UIColor(red: 0.2, green: 0.35, blue: 0.6, alpha: 1),
+                                 UIColor(white: 0.75, alpha: 1), UIColor(white: 0.1, alpha: 1), UIColor(red: 0.6, green: 0.1, blue: 0.1, alpha: 1)]
         for (i, b) in l.cars.enumerated() {
             add(Self.parkedCar(b, color: colors[i % colors.count]))
         }
@@ -142,7 +143,7 @@ final class DriverWorld {
             add(Self.box(24, 0.18, 0.2, .systemYellow, at: SCNVector3(12, 0.09, Float(l.aisleEdge - 0.1))))
             for (i, x) in stride(from: 1.0, through: 21.0, by: 3.2).enumerated() {
                 add(Self.parkedCar(Box(x: x + 0.7, y: l.aisleEdge - 4.4, width: 1.8, height: 4.0),
-                                   color: colors[(i + 2) % colors.count]))
+                                   color: colors[(i + 2) % colors.count], noseDown: true))
             }
         } else {
             add(Self.box(24, wallHeight, 0.2, concrete, at: SCNVector3(12, 0.6, 0.2)))
@@ -180,14 +181,12 @@ final class DriverWorld {
         return node
     }
 
-    private static func parkedCar(_ b: Box, color: UIColor) -> SCNNode {
-        let node = SCNNode()
-        node.position = SCNVector3(Float(b.x + b.width / 2), 0, Float(b.y + b.height / 2))
-        let along = b.width > b.height
-        node.addChildNode(box(b.width, 0.8, b.height, color, at: SCNVector3(0, 0.5, 0)))
-        node.addChildNode(box(along ? b.width * 0.5 : b.width - 0.2, 0.5, along ? b.height - 0.2 : b.height * 0.5,
-                              UIColor(white: 0.15, alpha: 1), at: SCNVector3(0, 1.15, 0)))
-        return node
+    // Perpendicular cars face the aisle; cars in a parallel row face +x.
+    private static func parkedCar(_ b: Box, color: UIColor, noseDown: Bool = false) -> SCNNode {
+        let car = Sedan(paint: color).node
+        car.position = SCNVector3(Float(b.x + b.width / 2), 0, Float(b.y + b.height / 2))
+        if b.height > b.width { car.eulerAngles.y = noseDown ? -.pi / 2 : .pi / 2 }
+        return car
     }
 
     private static func camera(on car: SCNNode, at position: SCNVector3, yaw: Float, pitch: Float,
