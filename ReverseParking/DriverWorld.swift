@@ -12,7 +12,7 @@ final class DriverWorld {
     private let bodyMaterial = SCNMaterial()
     private let staticRoot = SCNNode()
     private var trackNodes: [SCNNode] = []
-    private var layoutKey = ""
+    private var builtLayout: Layout?
 
     private static let guideMask = 2
     private static let rearMarkMask = 4
@@ -70,10 +70,9 @@ final class DriverWorld {
     }
 
     func update(_ model: ParkingModel, showGuide: Bool) {
-        let key = "\(model.aisleEdge)-\(model.rightEdge)"
-        if key != layoutKey {
-            layoutKey = key
-            buildLot(aisleEdge: model.aisleEdge, rightEdge: model.rightEdge)
+        if model.layout != builtLayout {
+            builtLayout = model.layout
+            buildLot(model.layout)
         }
 
         let p = model.pose
@@ -106,52 +105,68 @@ final class DriverWorld {
         }
     }
 
-    private func buildLot(aisleEdge: Double, rightEdge: Double) {
+    private func buildLot(_ l: Layout) {
         staticRoot.childNodes.forEach { $0.removeFromParentNode() }
         let add = { (node: SCNNode) in self.staticRoot.addChildNode(node) }
         let concrete = UIColor(white: 0.62, alpha: 1)
         let asphalt = UIColor(white: 0.24, alpha: 1)
         let line = UIColor(white: 0.95, alpha: 1)
-        let low = aisleEdge > 1 ? aisleEdge : 0.3
+        let low = l.aisleEdge > 1 ? l.aisleEdge : 0.3
+        let back = l.backEdge
+        let wallHeight = 1.2
 
         add(Self.box(160, 0.02, 160, UIColor(red: 0.36, green: 0.42, blue: 0.34, alpha: 1), at: SCNVector3(12, -0.02, 8)))
         add(Self.box(23.4, 0.01, 15.4, asphalt, at: SCNVector3(12, 0, 8)))
 
-        for x in [6.0, 10.0, 13.2, 17.2] {
-            add(Self.box(0.12, 0.01, 6, line, at: SCNVector3(Float(x), 0.008, 12)))
+        for b in l.stalls {
+            for x in [b.x, b.x + b.width] {
+                add(Self.box(0.12, 0.01, b.height, line, at: SCNVector3(Float(x), 0.008, Float(b.y + b.height / 2))))
+            }
+            add(Self.box(b.width + 0.12, 0.01, 0.12, line, at: SCNVector3(Float(b.x + b.width / 2), 0.008, Float(b.y + b.height))))
         }
-        add(Self.box(11.2, 0.01, 0.12, line, at: SCNVector3(11.6, 0.008, 15)))
-        let t = ParkingModel.target
-        add(Self.box(t.width - 0.2, 0.005, t.height, UIColor.systemGreen.withAlphaComponent(0.35),
+        let t = l.target
+        add(Self.box(t.width - 0.2, 0.005, t.height - 0.2, UIColor.systemGreen.withAlphaComponent(0.35),
                      at: SCNVector3(Float(t.x + t.width / 2), 0.006, Float(t.y + t.height / 2))))
 
-        for (i, b) in ParkingModel.obstacles.enumerated() {
-            add(Self.parkedCar(width: b.width, length: b.height, color: i == 0 ? .systemGray : .systemBrown,
-                               at: Vector(x: b.x + b.width / 2, y: b.y + b.height / 2)))
+        let colors: [UIColor] = [.systemGray, .systemBrown, .white, .darkGray, .systemBlue, .systemGray2, .black, .systemRed]
+        for (i, b) in l.cars.enumerated() {
+            add(Self.parkedCar(b, color: colors[i % colors.count]))
+        }
+        for b in l.pillars {
+            let c = SCNVector3(Float(b.x + b.width / 2), 0, Float(b.y + b.height / 2))
+            add(Self.box(b.width, 3, b.height, concrete, at: SCNVector3(c.x, 1.5, c.z)))
+            add(Self.box(b.width + 0.02, 0.5, b.height + 0.02, .systemOrange, at: SCNVector3(c.x, 0.5, c.z)))
         }
 
-        if aisleEdge > 1 {
-            add(Self.box(24, 0.18, 0.2, .systemYellow, at: SCNVector3(12, 0.09, Float(aisleEdge - 0.1))))
-            let colors: [UIColor] = [.systemGray, .white, .darkGray, .systemBlue, .systemGray2, .black, .systemRed]
+        if l.aisleEdge > 1 {
+            add(Self.box(24, 0.18, 0.2, .systemYellow, at: SCNVector3(12, 0.09, Float(l.aisleEdge - 0.1))))
             for (i, x) in stride(from: 1.0, through: 21.0, by: 3.2).enumerated() {
-                add(Self.parkedCar(width: 1.8, length: 4.0, color: colors[i % colors.count],
-                                   at: Vector(x: x + 1.6, y: aisleEdge - 2.4)))
+                add(Self.parkedCar(Box(x: x + 0.7, y: l.aisleEdge - 4.4, width: 1.8, height: 4.0),
+                                   color: colors[(i + 2) % colors.count]))
             }
         } else {
-            add(Self.box(24, 1.2, 0.2, concrete, at: SCNVector3(12, 0.6, 0.2)))
+            add(Self.box(24, wallHeight, 0.2, concrete, at: SCNVector3(12, 0.6, 0.2)))
         }
-        add(Self.box(24, 1.2, 0.2, concrete, at: SCNVector3(12, 0.6, 15.8)))
-        add(Self.box(0.2, 1.2, 15.4, concrete, at: SCNVector3(0.2, 0.6, 8)))
 
-        if rightEdge > 24 {
-            add(Self.box(0.2, 1.2, 6.7, concrete, at: SCNVector3(23.8, 0.6, 12.35)))
-            add(Self.box(30, 0.01, 9 - low, asphalt, at: SCNVector3(38.7, 0, Float((low + 9) / 2))))
-            add(Self.box(30, 0.18, 0.2, .systemYellow, at: SCNVector3(38.7, 0.09, 9.1)))
-            if aisleEdge > 1 {
-                add(Self.box(30, 0.18, 0.2, .systemYellow, at: SCNVector3(38.7, 0.09, Float(aisleEdge - 0.1))))
-            }
+        if l.parallel {
+            add(Self.box(24, 0.18, 0.2, .systemYellow, at: SCNVector3(12, 0.09, Float(back + 0.1))))
+            add(Self.box(24, 0.15, 3, concrete, at: SCNVector3(12, 0.075, Float(back + 1.7))))
         } else {
-            add(Self.box(0.2, 1.2, Double(15.7 - low), concrete, at: SCNVector3(23.8, 0.6, Float((low + 15.7) / 2))))
+            add(Self.box(24, wallHeight, 0.2, concrete, at: SCNVector3(12, 0.6, Float(back + 0.1))))
+        }
+
+        // Side walls run the full depth, or only along the stall row when that side is an entrance.
+        for (open, x, road) in [(l.leftEdge < 0, 0.2, -14.7), (l.rightEdge > 24, 23.8, 38.7)] {
+            if open {
+                add(Self.box(0.2, wallHeight, back - 9, concrete, at: SCNVector3(Float(x), 0.6, Float((9 + back) / 2))))
+                add(Self.box(30, 0.01, 9 - low, asphalt, at: SCNVector3(Float(road), 0, Float((low + 9) / 2))))
+                add(Self.box(30, 0.18, 0.2, .systemYellow, at: SCNVector3(Float(road), 0.09, 9.1)))
+                if l.aisleEdge > 1 {
+                    add(Self.box(30, 0.18, 0.2, .systemYellow, at: SCNVector3(Float(road), 0.09, Float(l.aisleEdge - 0.1))))
+                }
+            } else {
+                add(Self.box(0.2, wallHeight, back - 0.3, concrete, at: SCNVector3(Float(x), 0.6, Float((0.3 + back) / 2))))
+            }
         }
     }
 
@@ -165,11 +180,13 @@ final class DriverWorld {
         return node
     }
 
-    private static func parkedCar(width: Double, length: Double, color: UIColor, at c: Vector) -> SCNNode {
+    private static func parkedCar(_ b: Box, color: UIColor) -> SCNNode {
         let node = SCNNode()
-        node.position = SCNVector3(Float(c.x), 0, Float(c.y))
-        node.addChildNode(box(width, 0.8, length, color, at: SCNVector3(0, 0.5, 0)))
-        node.addChildNode(box(width - 0.2, 0.5, length * 0.5, UIColor(white: 0.15, alpha: 1), at: SCNVector3(0, 1.15, 0)))
+        node.position = SCNVector3(Float(b.x + b.width / 2), 0, Float(b.y + b.height / 2))
+        let along = b.width > b.height
+        node.addChildNode(box(b.width, 0.8, b.height, color, at: SCNVector3(0, 0.5, 0)))
+        node.addChildNode(box(along ? b.width * 0.5 : b.width - 0.2, 0.5, along ? b.height - 0.2 : b.height * 0.5,
+                              UIColor(white: 0.15, alpha: 1), at: SCNVector3(0, 1.15, 0)))
         return node
     }
 

@@ -30,7 +30,7 @@ struct DriverPanel: View {
     private var reversing: Bool { model.gear < 0 }
 
     private var clearance: Double {
-        ParkingModel.clearance(model.pose, aisleEdge: model.aisleEdge, rightEdge: model.rightEdge)
+        ParkingModel.clearance(model.pose, in: model.layout)
     }
 
     var body: some View {

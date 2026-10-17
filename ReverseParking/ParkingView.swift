@@ -22,6 +22,7 @@ struct ParkingView: View {
     private var status: String {
         if model.won { return "入库成功！" }
         if model.collision { return "碰到了 · 换挡驶离" }
+        if model.noseIn { return "车头朝里了，要倒进去才算" }
         if model.onLine { return "压线了，调整方向" }
         if model.gear == 0 { return scenario.hint }
         if !pressing { return model.gear < 0 ? "R · 按住电门倒车" : "D · 按住电门前进" }
@@ -80,8 +81,14 @@ struct ParkingView: View {
             Button { dismiss() } label: { Image(systemName: "chevron.left") }
                 .padding(.trailing, 6)
             Menu {
-                Picker("场景", selection: $scenario) {
-                    ForEach(Scenario.all) { Text($0.name).tag($0) }
+                ForEach(Scenario.groups, id: \.self) { group in
+                    Section(group) {
+                        ForEach(Scenario.all.filter { $0.group == group }) { item in
+                            Button { scenario = item } label: {
+                                if item == scenario { Label(item.name, systemImage: "checkmark") } else { Text(item.name) }
+                            }
+                        }
+                    }
                 }
             } label: {
                 HStack(spacing: 4) {
@@ -277,29 +284,44 @@ struct ParkingCanvas: View {
                 context.rotate(by: .radians(-.pi / 2 - model.pose.heading))
                 context.translateBy(x: -center.x, y: -center.y)
             }
+            let l = model.layout
+            let asphalt = Color(red: 0.11, green: 0.12, blue: 0.14)
+            let paint = Color.white.opacity(0.85)
             let lot = rect(Box(x: 0, y: 0, width: 24, height: 16))
-            context.fill(Path(lot), with: .color(Color(red: 0.11, green: 0.12, blue: 0.14)))
+            context.fill(Path(lot), with: .color(asphalt))
             context.stroke(Path(lot), with: .color(.yellow.opacity(0.6)), lineWidth: 3)
-            if model.rightEdge > 24 {
-                context.fill(Path(rect(Box(x: 22, y: model.aisleEdge, width: model.rightEdge - 22, height: 9 - model.aisleEdge))),
-                             with: .color(Color(red: 0.11, green: 0.12, blue: 0.14)))
-                context.draw(Text("入口").font(.caption).foregroundColor(.gray),
-                             at: point(Vector(x: 25.5, y: 8.3)))
+            if l.rightEdge > 24 {
+                context.fill(Path(rect(Box(x: 22, y: l.aisleEdge, width: l.rightEdge - 22, height: 9 - l.aisleEdge))),
+                             with: .color(asphalt))
+                context.draw(Text("入口").font(.caption).foregroundColor(.gray), at: point(Vector(x: 25.5, y: 8.3)))
+            }
+            if l.leftEdge < 0 {
+                context.fill(Path(rect(Box(x: l.leftEdge, y: l.aisleEdge, width: 2 - l.leftEdge, height: 9 - l.aisleEdge))),
+                             with: .color(asphalt))
+                context.draw(Text("入口").font(.caption).foregroundColor(.gray), at: point(Vector(x: -1.5, y: 8.3)))
+            }
+            if l.backEdge < 15.7 {
+                context.fill(Path(rect(Box(x: 0, y: l.backEdge, width: 24, height: 16 - l.backEdge))),
+                             with: .color(Color(white: 0.32)))
+                context.stroke(line(Vector(x: 0, y: l.backEdge), Vector(x: 24, y: l.backEdge)),
+                               with: .color(.yellow.opacity(0.8)), lineWidth: 3)
             }
 
-            context.fill(Path(rect(ParkingModel.target)), with: .color(.green.opacity(0.22)))
-            for x in [6.0, 10.0, 13.2, 17.2] {
-                context.stroke(line(Vector(x: x, y: 9), Vector(x: x, y: 15)),
-                               with: .color(.white.opacity(0.85)), lineWidth: 2)
+            context.fill(Path(rect(l.target)), with: .color(.green.opacity(0.22)))
+            for b in l.stalls {
+                var outline = Path()
+                outline.move(to: point(Vector(x: b.x, y: b.y)))
+                outline.addLine(to: point(Vector(x: b.x, y: b.y + b.height)))
+                outline.addLine(to: point(Vector(x: b.x + b.width, y: b.y + b.height)))
+                outline.addLine(to: point(Vector(x: b.x + b.width, y: b.y)))
+                context.stroke(outline, with: .color(paint), lineWidth: 2)
             }
-            context.stroke(line(Vector(x: 6, y: 15), Vector(x: 17.2, y: 15)),
-                           with: .color(.white.opacity(0.85)), lineWidth: 2)
-            if model.aisleEdge > 1 {
-                let edge = model.aisleEdge
-                context.fill(Path(rect(Box(x: 0, y: 0, width: 24, height: edge))),
+            if l.aisleEdge > 1 {
+                let edge = l.aisleEdge
+                context.fill(Path(rect(Box(x: min(0, l.leftEdge), y: 0, width: max(24, l.rightEdge) - min(0, l.leftEdge), height: edge))),
                              with: .color(Color(red: 0.2, green: 0.21, blue: 0.24)))
-                context.stroke(line(Vector(x: 0, y: edge), Vector(x: 24, y: edge)),
-                               with: .color(.white.opacity(0.85)), lineWidth: 2)
+                context.stroke(line(Vector(x: min(0, l.leftEdge), y: edge), Vector(x: max(24, l.rightEdge), y: edge)),
+                               with: .color(paint), lineWidth: 2)
                 for x in stride(from: 1.0, through: 21.0, by: 3.2) {
                     context.fill(Path(roundedRect: rect(Box(x: x + 0.7, y: edge - 2.9, width: 1.8, height: 2.6)),
                                       cornerRadius: scale * 0.4),
@@ -311,9 +333,12 @@ struct ParkingCanvas: View {
                                style: StrokeStyle(lineWidth: 2, dash: [14, 12]))
             }
 
-            for obstacle in ParkingModel.obstacles {
-                context.fill(Path(roundedRect: rect(obstacle), cornerRadius: scale * 0.4),
-                             with: .color(Color(white: 0.45)))
+            for b in l.cars {
+                context.fill(Path(roundedRect: rect(b), cornerRadius: scale * 0.4), with: .color(Color(white: 0.45)))
+            }
+            for b in l.pillars {
+                context.fill(Path(rect(b)), with: .color(Color(white: 0.75)))
+                context.stroke(Path(rect(b)), with: .color(.orange), lineWidth: 2)
             }
 
             if showGuide && !model.won {
@@ -332,8 +357,8 @@ struct ParkingCanvas: View {
             }
 
             let p = model.pose
-            let paint = model.won ? Color.green : model.collision ? Color.red : Color.cyan
-            context.fill(polygon(ParkingModel.corners(p)), with: .color(paint))
+            let body = model.won ? Color.green : model.collision ? Color.red : Color.cyan
+            context.fill(polygon(ParkingModel.corners(p)), with: .color(body))
             var car = context
             let c = point(Vector(x: p.x, y: p.y))
             car.translateBy(x: c.x, y: c.y)
