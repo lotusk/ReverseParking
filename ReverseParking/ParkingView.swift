@@ -1,7 +1,13 @@
 import SwiftUI
 import Combine
 
+enum PracticeMode: String, Hashable {
+    case topDown, driver
+}
+
 struct ParkingView: View {
+    let mode: PracticeMode
+    @State private var world = DriverWorld()
     @State private var scenario = Scenario.all[0]
     @State private var model = ParkingModel(scenario: Scenario.all[0])
     @State private var wheelAngle = 0.0
@@ -9,6 +15,7 @@ struct ParkingView: View {
     @State private var showGuide = true
     @State private var showHelp = false
     @Environment(\.scenePhase) private var phase
+    @Environment(\.dismiss) private var dismiss
     private let timer = Timer.publish(every: 1.0 / 60, on: .main, in: .common).autoconnect()
     static let maxWheel = 270.0
 
@@ -24,14 +31,20 @@ struct ParkingView: View {
     var body: some View {
         VStack(spacing: 12) {
             topBar
-            ParkingCanvas(model: model, showGuide: showGuide)
-                .clipShape(RoundedRectangle(cornerRadius: 18))
+            Group {
+                if mode == .driver {
+                    DriverPanel(world: world, model: model, showGuide: showGuide)
+                } else {
+                    ParkingCanvas(model: model, showGuide: showGuide)
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 18))
             gearBar
             HStack(spacing: 14) {
                 pedal
                 SteeringWheel(angle: $wheelAngle, maxAngle: Self.maxWheel)
             }
-            .frame(height: 230)
+            .frame(height: mode == .driver ? 200 : 230)
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 8)
@@ -39,7 +52,11 @@ struct ParkingView: View {
         .sensoryFeedback(.error, trigger: model.collision) { _, hit in hit }
         .sensoryFeedback(.success, trigger: model.won) { _, won in won }
         .sheet(isPresented: $showHelp) { help }
-        .onAppear { UIApplication.shared.isIdleTimerDisabled = true }
+        .toolbar(.hidden, for: .navigationBar)
+        .onAppear {
+            UIApplication.shared.isIdleTimerDisabled = true
+            if mode == .driver { world.update(model, showGuide: showGuide) }
+        }
         .onDisappear { UIApplication.shared.isIdleTimerDisabled = false }
         .onChange(of: scenario) { restart() }
         .onChange(of: phase) { _, value in if value != .active { model.gear = 0 } }
@@ -48,6 +65,7 @@ struct ParkingView: View {
             model.steering = wheelAngle / Self.maxWheel
             model.driving = model.gear != 0 && pressing && !showHelp
             model.step(1.0 / 60)
+            if mode == .driver { world.update(model, showGuide: showGuide) }
         }
     }
 
@@ -59,6 +77,8 @@ struct ParkingView: View {
     private var topBar: some View {
         VStack(alignment: .leading, spacing: 6) {
         HStack {
+            Button { dismiss() } label: { Image(systemName: "chevron.left") }
+                .padding(.trailing, 6)
             Menu {
                 Picker("场景", selection: $scenario) {
                     ForEach(Scenario.all) { Text($0.name).tag($0) }
@@ -132,6 +152,8 @@ struct ParkingView: View {
                 Text("手指按住方向盘转圈，或在上面左右划。左右各转 3/4 圈打满。")
                 Text("方向盘松手不会自己回正，和真车一样。点「回正」一键回正。")
                 Text("黄线是车尾两角会走的路线（D 挡时是车头）。")
+                Text("驾驶视角：挂 R 自动切倒车影像，红黄绿线分别是 0.5、1、2 米。后视镜在 R 挡会自动下压。")
+                Text("右下角小图以车为中心、车头朝上，左下角是离障碍物最近的距离。")
                 Text("车完全进绿色车位、车身摆正后停车，就算成功。")
             }
             .navigationTitle("怎么练")
@@ -213,19 +235,20 @@ struct SteeringWheel: View {
 struct ParkingCanvas: View {
     let model: ParkingModel
     let showGuide: Bool
+    var carView = false
     static let home = Vector(x: 12, y: 9)
     static let visibleWidth = 19.0
 
     var body: some View {
         Canvas { context, size in
-            let scale = min(size.width / Self.visibleWidth, size.height / 16.5)
+            let scale = carView ? size.width / 11 : min(size.width / Self.visibleWidth, size.height / 16.5)
             let halfW = size.width / scale / 2, halfH = size.height / scale / 2
             func follow(_ value: Double, _ home: Double, _ half: Double) -> Double {
                 let margin = half - 2.8
                 return home + max(0, abs(value - home) - margin) * (value < home ? -1 : 1)
             }
-            let camera = Vector(x: follow(model.pose.x, Self.home.x, halfW),
-                                y: follow(model.pose.y, Self.home.y, halfH))
+            let camera = carView ? Vector(x: model.pose.x, y: model.pose.y)
+                : Vector(x: follow(model.pose.x, Self.home.x, halfW), y: follow(model.pose.y, Self.home.y, halfH))
             let center = CGPoint(x: size.width / 2, y: size.height / 2)
             func point(_ p: Vector) -> CGPoint {
                 CGPoint(x: center.x + (p.x - camera.x) * scale,
@@ -249,6 +272,11 @@ struct ParkingCanvas: View {
             }
 
             context.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color(red: 0.16, green: 0.19, blue: 0.17)))
+            if carView {
+                context.translateBy(x: center.x, y: center.y)
+                context.rotate(by: .radians(-.pi / 2 - model.pose.heading))
+                context.translateBy(x: -center.x, y: -center.y)
+            }
             let lot = rect(Box(x: 0, y: 0, width: 24, height: 16))
             context.fill(Path(lot), with: .color(Color(red: 0.11, green: 0.12, blue: 0.14)))
             context.stroke(Path(lot), with: .color(.yellow.opacity(0.6)), lineWidth: 3)

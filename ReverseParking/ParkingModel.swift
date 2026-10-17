@@ -66,6 +66,27 @@ struct ParkingModel {
             || obstacles.contains { overlaps(points, $0.corners) }
     }
 
+    static func clearance(_ p: Pose, aisleEdge: Double = 0.3, rightEdge: Double = 23.7) -> Double {
+        let c = corners(p)
+        let samples = c.indices.flatMap { i -> [Vector] in
+            let a = c[i], b = c[(i + 1) % c.count]
+            return (0..<6).map { k in
+                let t = Double(k) / 6
+                return Vector(x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t)
+            }
+        }
+        return samples.map { v in
+            var d = min(v.x - 0.3, v.y - aisleEdge, 15.7 - v.y, rightEdge - v.x)
+            if v.y > 9 { d = min(d, 23.7 - v.x) }
+            for b in obstacles {
+                let dx = max(b.x - v.x, 0, v.x - b.x - b.width)
+                let dy = max(b.y - v.y, 0, v.y - b.y - b.height)
+                d = min(d, hypot(dx, dy))
+            }
+            return d
+        }.min() ?? 0
+    }
+
     static func parked(_ p: Pose) -> Bool {
         let t = target
         let alignment = abs(cos(p.heading)) < sin(8 * Double.pi / 180)

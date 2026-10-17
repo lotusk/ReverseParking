@@ -11,6 +11,15 @@ iPhone app for practicing reverse parking. SwiftUI + Core Motion, iOS 17+.
 
 With a free Apple ID the app expires after 7 days. Run it again from Xcode to renew.
 
+## Two modes
+
+The home screen has two modes. They share scenarios, gears, pedal and wheel.
+
+- 俯视练习: the original top-down view of the whole lot.
+- 驾驶视角: first-person 3D (SceneKit). Side mirrors at the top, a 360 heading-up minimap at the bottom right, and the nearest-obstacle distance at the bottom left.
+  - In R the main view switches to a backup camera, mirrored like a real one, with 0.5 / 1 / 2 m lines and the predicted path.
+  - In R both mirrors tilt down to show the bay lines.
+
 ## How to play
 
 - Portrait. Pick R, P or D.
