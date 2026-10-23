@@ -31,10 +31,12 @@ enum CarPaint: String, CaseIterable, Identifiable {
 // Top view of a sedan in the style of a Model 3, drawn in metres around the car centre.
 // Car-local x points forward, y points to the car's right.
 func drawSedan(_ context: GraphicsContext, at center: CGPoint, heading: Double, scale: CGFloat,
-               paint: Color, steering: Double = 0, reversing: Bool = false, outline: Color? = nil) {
+               paint: Color, steering: Double = 0, reversing: Bool = false, outline: Color? = nil,
+               length: Double = ParkingModel.length, width: Double = ParkingModel.width) {
     var c = context
     c.translateBy(x: center.x, y: center.y)
     c.rotate(by: .radians(heading))
+    c.scaleBy(x: length / 4.2, y: width / 1.8)
     func rect(_ x0: Double, _ y0: Double, _ x1: Double, _ y1: Double) -> CGRect {
         CGRect(x: x0 * scale, y: y0 * scale, width: (x1 - x0) * scale, height: (y1 - y0) * scale)
     }
@@ -80,6 +82,7 @@ func drawSedan(_ context: GraphicsContext, at center: CGPoint, heading: Double, 
 
 struct Sedan {
     let node = SCNNode()
+    private let shell = SCNNode()
     let bodyMaterial = SCNMaterial()
     private(set) var frontWheels: [SCNNode] = []
 
@@ -112,13 +115,16 @@ struct Sedan {
         return shape
     }()
 
-    init(paint: UIColor, interior: Bool = false) {
+    // The shapes below are drawn for a 4.2 x 1.8 m car and scaled to the requested size.
+    init(paint: UIColor, length: Double = ParkingModel.length, width: Double = ParkingModel.width, interior: Bool = false) {
+        shell.scale = SCNVector3(Float(length / 4.2), 1.06, Float(width / 1.8))
+        node.addChildNode(shell)
         bodyMaterial.diffuse.contents = paint
         bodyMaterial.specular.contents = UIColor(white: 0.7, alpha: 1)
         bodyMaterial.shininess = 0.5
         let body = SCNNode(geometry: Self.bodyShape.copy() as? SCNGeometry)
         body.geometry?.materials = [bodyMaterial]
-        node.addChildNode(body)
+        shell.addChildNode(body)
 
         let glass = SCNMaterial()
         glass.diffuse.contents = UIColor(red: 0.04, green: 0.05, blue: 0.07, alpha: 1)
@@ -126,7 +132,7 @@ struct Sedan {
         glass.shininess = 0.8
         let roof = SCNNode(geometry: Self.glassShape.copy() as? SCNGeometry)
         roof.geometry?.materials = [glass]
-        node.addChildNode(roof)
+        shell.addChildNode(roof)
 
         let tire = SCNMaterial()
         tire.diffuse.contents = UIColor(white: 0.06, alpha: 1)
@@ -144,7 +150,7 @@ struct Sedan {
                 cap.geometry?.materials = [rim]
                 wheel.addChildNode(cap)
                 pivot.addChildNode(wheel)
-                node.addChildNode(pivot)
+                shell.addChildNode(pivot)
                 if x > 0 { frontWheels.append(pivot) }
             }
         }
@@ -155,23 +161,23 @@ struct Sedan {
             lamp.geometry?.materials = [head]
             lamp.position = SCNVector3(2.0, 0.68, Float(z))
             lamp.eulerAngles.y = Float(z > 0 ? 0.35 : -0.35)
-            node.addChildNode(lamp)
+            shell.addChildNode(lamp)
         }
         let tail = SCNNode(geometry: SCNBox(width: 0.05, height: 0.06, length: 1.55, chamferRadius: 0.02))
         tail.geometry?.materials = [Self.material(UIColor(red: 0.9, green: 0.05, blue: 0.08, alpha: 1), glow: true)]
         tail.position = SCNVector3(-2.08, 0.8, 0)
-        node.addChildNode(tail)
+        shell.addChildNode(tail)
 
         if interior {
             let dash = SCNNode(geometry: SCNBox(width: 0.55, height: 0.06, length: 1.6, chamferRadius: 0.03))
             dash.geometry?.materials = [Self.material(UIColor(white: 0.12, alpha: 1))]
             dash.position = SCNVector3(0.68, 0.97, 0)
-            node.addChildNode(dash)
+            shell.addChildNode(dash)
             let screen = SCNNode(geometry: SCNBox(width: 0.02, height: 0.19, length: 0.32, chamferRadius: 0.01))
             screen.geometry?.materials = [Self.material(UIColor(red: 0.12, green: 0.17, blue: 0.24, alpha: 1), glow: true)]
             screen.position = SCNVector3(0.72, 1.06, 0.05)
             screen.eulerAngles.z = 0.25
-            node.addChildNode(screen)
+            shell.addChildNode(screen)
         }
     }
 

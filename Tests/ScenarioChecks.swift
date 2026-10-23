@@ -3,7 +3,7 @@ func key(_ p: Pose) -> Key {
     var h = p.heading.truncatingRemainder(dividingBy: 2 * .pi); if h < 0 { h += 2 * .pi }
     return Key(x: Int((p.x * 5).rounded()), y: Int((p.y * 5).rounded()), h: Int((h * 180 / .pi / 3).rounded()) % 120)
 }
-let steers = [-1.0, -0.5, 0, 0.5, 1]
+let steers = [-1.0, -0.5, -0.2, 0, 0.2, 0.5, 1]
 func explore(_ starts: [Pose], dir: Double, in l: Layout) -> [Pose] {
     var seen = Set(starts.map(key)), out: [Pose] = [], queue = starts
     while let p = queue.popLast() {

@@ -29,4 +29,12 @@ p.x = startX
 for _ in 0..<1000 { p = ParkingModel.advanced(p, steering: 1, travel: -radius * .pi / 2 / 1000); check(!ParkingModel.blocked(p), "Entry arc clear") }
 for _ in 0..<400 { p = ParkingModel.advanced(p, steering: 0, travel: -0.006); check(!ParkingModel.blocked(p), "Straight finish clear") }
 check(ParkingModel.parked(p), "Scenario can be completed")
-print("All 11 model checks passed, including a collision-free parking route.")
+let l = Layout.standard
+let straight90 = -Double.pi / 2
+check(ParkingModel.fit(Pose(x: 11.6, y: 12, heading: straight90), in: l)!.perfect, "Centered and straight is perfect")
+let tilted = ParkingModel.fit(Pose(x: 11.6, y: 12, heading: straight90 + 5 * .pi / 180), in: l)!
+check(!tilted.good && abs(tilted.angle - 5) < 0.01, "5 degrees off is not good enough")
+let shifted = ParkingModel.fit(Pose(x: 12.0, y: 12, heading: straight90), in: l)!
+check(!shifted.good && abs(shifted.offset - 0.4) < 0.01, "0.4 m to the right is not good enough")
+check(ParkingModel.fit(Pose(x: 11.8, y: 12, heading: straight90 + 2 * .pi / 180), in: l)!.good, "2 degrees and 0.2 m is good")
+print("All 15 model checks passed, including a collision-free parking route.")

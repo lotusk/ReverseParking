@@ -20,14 +20,29 @@ struct ParkingView: View {
     private let timer = Timer.publish(every: 1.0 / 60, on: .main, in: .common).autoconnect()
     static let maxWheel = 270.0
 
+    private var fit: ParkingModel.Fit? { ParkingModel.fit(model.pose, in: model.layout) }
+
     private var status: String {
-        if model.won { return "入库成功！" }
+        if model.won, let f = fit {
+            return String(format: "%@ · 歪 %.1f° · 偏 %.2f 米", f.perfect ? "完美入库" : "入库成功", f.angle, abs(f.offset))
+        }
         if model.collision { return "碰到了 · 换挡驶离" }
         if model.noseIn { return "车头朝里了，要倒进去才算" }
+        if !pressing, let f = fit, !f.good { return advice(f) }
         if model.onLine { return "压线了，调整方向" }
         if model.gear == 0 { return scenario.hint }
         if !pressing { return model.gear < 0 ? "R · 按住电门倒车" : "D · 按住电门前进" }
         return model.gear < 0 ? "R 倒车中" : "D 前进中"
+    }
+
+    private func advice(_ f: ParkingModel.Fit) -> String {
+        var parts: [String] = []
+        if f.angle > 3 { parts.append(String(format: "歪了 %.1f°", f.angle)) }
+        if abs(f.offset) > 0.3 {
+            let side = model.layout.parallel ? (f.offset > 0 ? "太靠路边" : "离路边太远") : (f.offset > 0 ? "偏右" : "偏左")
+            parts.append(String(format: "%@ %.2f 米", side, abs(f.offset)))
+        }
+        return "已进库，" + parts.joined(separator: "，") + "，再调正"
     }
 
     var body: some View {
@@ -175,7 +190,7 @@ struct ParkingView: View {
                 Text("黄线是车尾两角会走的路线（D 挡时是车头）。")
                 Text("驾驶视角：挂 R 自动切倒车影像，红黄绿线分别是 0.5、1、2 米。后视镜在 R 挡会自动下压。")
                 Text("右下角小图以车为中心、车头朝上，左下角是离障碍物最近的距离。")
-                Text("车完全进绿色车位、车身摆正后停车，就算成功。")
+                Text("车完全进绿色车位，车身歪不超过 3°、左右偏不超过 0.3 米，停下才算成功。1.5° 和 0.15 米以内算完美。")
                 }
             }
             .navigationTitle("设置与说明")
@@ -339,7 +354,7 @@ struct ParkingCanvas: View {
                 context.stroke(line(Vector(x: min(0, l.leftEdge), y: edge), Vector(x: max(24, l.rightEdge), y: edge)),
                                with: .color(lineColor), lineWidth: 2)
                 for (i, x) in stride(from: 1.0, through: 21.0, by: 3.2).enumerated() {
-                    drawSedan(context, at: point(Vector(x: x + 1.6, y: edge - 2.4)), heading: .pi / 2, scale: scale,
+                    drawSedan(context, at: point(Vector(x: x + 1.6, y: edge - 2.7)), heading: .pi / 2, scale: scale,
                               paint: [Color(white: 0.4), Color(white: 0.85), Color(red: 0.25, green: 0.3, blue: 0.4)][i % 3])
                 }
             } else {
@@ -352,7 +367,8 @@ struct ParkingCanvas: View {
                                         Color(white: 0.3), Color(red: 0.2, green: 0.35, blue: 0.6)]
             for (i, b) in l.cars.enumerated() {
                 drawSedan(context, at: point(Vector(x: b.x + b.width / 2, y: b.y + b.height / 2)),
-                          heading: b.height > b.width ? -.pi / 2 : 0, scale: scale, paint: parkedPaint[i % parkedPaint.count])
+                          heading: b.height > b.width ? -.pi / 2 : 0, scale: scale, paint: parkedPaint[i % parkedPaint.count],
+                          length: max(b.width, b.height), width: min(b.width, b.height))
             }
             for b in l.pillars {
                 context.fill(Path(rect(b)), with: .color(Color(white: 0.75)))

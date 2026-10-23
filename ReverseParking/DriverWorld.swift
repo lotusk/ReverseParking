@@ -37,24 +37,25 @@ final class DriverWorld {
 
         scene.rootNode.addChildNode(car)
 
-        driverCam = Self.camera(on: car, at: SCNVector3(0.1, 1.25, -0.4), yaw: -.pi / 2, pitch: -0.1,
+        let half = Float(ParkingModel.length / 2), side = Float(ParkingModel.width / 2)
+        driverCam = Self.camera(on: car, at: SCNVector3(0.1, 1.3, -0.42), yaw: -.pi / 2, pitch: -0.1,
                                 fov: 75, mask: 1 | Self.guideMask)
-        rearCam = Self.camera(on: car, at: SCNVector3(-2.15, 1.0, 0), yaw: .pi / 2, pitch: -0.6,
+        rearCam = Self.camera(on: car, at: SCNVector3(-half - 0.05, 1.05, 0), yaw: .pi / 2, pitch: -0.6,
                               fov: 100, mask: 1 | Self.guideMask | Self.rearMarkMask)
-        leftMirror = Self.camera(on: car, at: SCNVector3(0.9, 1.05, -1.2), yaw: .pi / 2 - 0.22, pitch: -0.08,
+        leftMirror = Self.camera(on: car, at: SCNVector3(1.0, 1.1, -side - 0.32), yaw: .pi / 2 - 0.22, pitch: -0.08,
                                  fov: 34, mask: 1)
-        rightMirror = Self.camera(on: car, at: SCNVector3(0.9, 1.05, 1.2), yaw: .pi / 2 + 0.22, pitch: -0.08,
+        rightMirror = Self.camera(on: car, at: SCNVector3(1.0, 1.1, side + 0.32), yaw: .pi / 2 + 0.22, pitch: -0.08,
                                   fov: 34, mask: 1)
 
         for (distance, color) in [(0.5, UIColor.systemRed), (1.0, .systemYellow), (2.0, .systemGreen)] {
-            let mark = Self.box(0.06, 0.01, 1.8, color, at: SCNVector3(-2.1 - distance, 0.02, 0))
+            let mark = Self.box(0.06, 0.01, ParkingModel.width, color, at: SCNVector3(-half - Float(distance), 0.02, 0))
             mark.categoryBitMask = Self.rearMarkMask
             car.addChildNode(mark)
         }
-        for z in [-0.9, 0.9] {
-            let side = Self.box(2.0, 0.01, 0.05, UIColor.white.withAlphaComponent(0.8), at: SCNVector3(-3.1, 0.02, z))
-            side.categoryBitMask = Self.rearMarkMask
-            car.addChildNode(side)
+        for z in [-side, side] {
+            let line = Self.box(2.0, 0.01, 0.05, UIColor.white.withAlphaComponent(0.8), at: SCNVector3(-half - 1, 0.02, z))
+            line.categoryBitMask = Self.rearMarkMask
+            car.addChildNode(line)
         }
 
         for _ in 0..<120 {
@@ -142,7 +143,7 @@ final class DriverWorld {
         if l.aisleEdge > 1 {
             add(Self.box(24, 0.18, 0.2, .systemYellow, at: SCNVector3(12, 0.09, Float(l.aisleEdge - 0.1))))
             for (i, x) in stride(from: 1.0, through: 21.0, by: 3.2).enumerated() {
-                add(Self.parkedCar(Box(x: x + 0.7, y: l.aisleEdge - 4.4, width: 1.8, height: 4.0),
+                add(Self.parkedCar(Box(x: x + 0.64, y: l.aisleEdge - 5.0, width: 1.92, height: 4.6),
                                    color: colors[(i + 2) % colors.count], noseDown: true))
             }
         } else {
@@ -183,7 +184,7 @@ final class DriverWorld {
 
     // Perpendicular cars face the aisle; cars in a parallel row face +x.
     private static func parkedCar(_ b: Box, color: UIColor, noseDown: Bool = false) -> SCNNode {
-        let car = Sedan(paint: color).node
+        let car = Sedan(paint: color, length: max(b.width, b.height), width: min(b.width, b.height)).node
         car.position = SCNVector3(Float(b.x + b.width / 2), 0, Float(b.y + b.height / 2))
         if b.height > b.width { car.eulerAngles.y = noseDown ? -.pi / 2 : .pi / 2 }
         return car

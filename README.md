@@ -20,7 +20,7 @@ The home screen has two modes. They share scenarios, gears, pedal and wheel.
   - In R the main view switches to a backup camera, mirrored like a real one, with 0.5 / 1 / 2 m lines and the predicted path.
   - In R both mirrors tilt down to show the bay lines.
 
-The cars are drawn as a Model 3 style sedan (top view in 2D, extruded side profile in 3D) with a glass roof,
+All cars are 4.75 x 1.92 m with a 2.89 m wheelbase (about a Model Y). They are drawn as a sedan (top view in 2D, extruded side profile in 3D) with a glass roof,
 light bar and turning front wheels. Pick the paint in the ? sheet; it is saved between launches.
 No logos or brand names are used.
 
@@ -30,7 +30,9 @@ No logos or brand names are used.
 - Hold mode, like a Tesla: the car only moves while you hold the pedal (left). Let go and it stops.
 - Turn the wheel (right) by dragging around it or swiping across it. 3/4 turn each way is full lock.
 - The wheel does not center itself. Tap 回正 to center it.
-- Park fully inside the green bay, within 8° of straight, then let go.
+- Park fully inside the green bay, then let go. It only counts when the car is within 3° of straight
+  and within 0.3 m of the middle of the bay. Within 1.5° and 0.15 m is 完美.
+- If you stop inside but not straight enough, the status line says why (tilt in degrees, left/right offset).
 - Yellow dashed lines show where the two rear corners will go (front corners in D).
 
 ## Scenarios
@@ -48,7 +50,7 @@ No logos or brand names are used.
 | 进阶 | 车位在右，停太近 | Too close to the row, pull forward first |
 | 进阶 | 车头歪着 | Start at an angle |
 | 进阶 | 车位后面是墙 | Short bay with a wall, stop in time |
-| 挑战 | 两边车压线 | Neighbours over the lines, 0.6 m each side |
+| 挑战 | 两边车压线 | Neighbours over the lines, about 0.5 m each side |
 | 挑战 | 窄车位 | 2.5 m bay |
 | 挑战 | 地库柱子 | Pillar at the bay mouth |
 | 侧方停车 | 侧方停车 | Parallel park between two cars |

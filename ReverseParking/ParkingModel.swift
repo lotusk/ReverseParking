@@ -41,7 +41,7 @@ struct Layout: Equatable {
         stalls: [Box(x: 6, y: 9, width: 4, height: 6), Box(x: 10, y: 9, width: 3.2, height: 6),
                  Box(x: 13.2, y: 9, width: 4, height: 6)],
         target: Box(x: 10, y: 9, width: 3.2, height: 6),
-        cars: [Box(x: 6.5, y: 10, width: 1.8, height: 4.2), Box(x: 15, y: 10, width: 1.8, height: 4.2)])
+        cars: [Box(x: 6.5, y: 9.6, width: 1.92, height: 4.75), Box(x: 15, y: 9.6, width: 1.92, height: 4.75)])
 
     func with(_ change: (inout Layout) -> Void) -> Layout {
         var copy = self
@@ -51,9 +51,9 @@ struct Layout: Equatable {
 }
 
 struct ParkingModel {
-    static let length = 4.2
-    static let width = 1.8
-    static let wheelbase = 2.6
+    static let length = 4.75
+    static let width = 1.92
+    static let wheelbase = 2.89
     var pose = Pose()
     var layout = Layout.standard
     var steering = 0.0
@@ -115,15 +115,27 @@ struct ParkingModel {
         }.min() ?? 0
     }
 
-    // Perpendicular stalls only count when backed in, nose toward the aisle.
-    static func parked(_ p: Pose, in l: Layout = .standard) -> Bool {
+    struct Fit {
+        let angle: Double
+        let offset: Double
+        var good: Bool { angle <= 3 && abs(offset) <= 0.3 }
+        var perfect: Bool { angle <= 1.5 && abs(offset) <= 0.15 }
+    }
+
+    // Angle is in degrees from straight; offset is metres from the middle of the bay, positive to the car's right
+    // for a backed-in bay and toward the curb for a parallel space. Nil when the car is not fully inside.
+    static func fit(_ p: Pose, in l: Layout) -> Fit? {
         let t = l.target
-        let limit = 8 * Double.pi / 180
-        let aligned = l.parallel ? abs(sin(p.heading)) < sin(limit) : -sin(p.heading) > cos(limit)
-        return aligned && corners(p).allSatisfy {
-            $0.x > t.x + 0.1 && $0.x < t.x + t.width - 0.1 &&
-            $0.y > t.y + 0.1 && $0.y < t.y + t.height - 0.1
-        }
+        guard corners(p).allSatisfy({
+            $0.x > t.x + 0.05 && $0.x < t.x + t.width - 0.05 && $0.y > t.y + 0.05 && $0.y < t.y + t.height - 0.05
+        }) else { return nil }
+        let error = l.parallel ? remainder(p.heading, .pi) : remainder(p.heading + .pi / 2, 2 * .pi)
+        let offset = l.parallel ? p.y - (t.y + t.height / 2) : p.x - (t.x + t.width / 2)
+        return Fit(angle: abs(error) * 180 / .pi, offset: offset)
+    }
+
+    static func parked(_ p: Pose, in l: Layout = .standard) -> Bool {
+        fit(p, in: l)?.good ?? false
     }
 
     static func advanced(_ p: Pose, steering: Double, travel: Double) -> Pose {
@@ -207,12 +219,12 @@ struct Scenario: Identifiable, Hashable {
                      start: Pose(x: 17, y: 6, heading: 0), layout: std.with {
                          $0.stalls = $0.stalls.map { Box(x: $0.x, y: 9, width: $0.width, height: 5.3) }
                          $0.target.height = 5.3
-                         $0.cars = $0.cars.map { Box(x: $0.x, y: 9.6, width: $0.width, height: $0.height) }
+                         $0.cars = $0.cars.map { Box(x: $0.x, y: 9.35, width: $0.width, height: $0.height) }
                          $0.backEdge = 14.5
                      }),
-            Scenario(group: "挑战", name: "两边车压线", hint: "邻车都压着线停，两边只剩 0.6 米",
+            Scenario(group: "挑战", name: "两边车压线", hint: "邻车都压着线停，两边只剩半米",
                      start: Pose(x: 17, y: 6, heading: 0), layout: std.with {
-                         $0.cars = [Box(x: 8.3, y: 10, width: 1.8, height: 4.2), Box(x: 13.1, y: 10, width: 1.8, height: 4.2)]
+                         $0.cars = [Box(x: 8.18, y: 9.6, width: 1.92, height: 4.75), Box(x: 13.1, y: 9.6, width: 1.92, height: 4.75)]
                          $0.aisleEdge = 3
                      }),
             Scenario(group: "挑战", name: "窄车位", hint: "车位只有 2.5 米宽",
@@ -220,7 +232,7 @@ struct Scenario: Identifiable, Hashable {
                          $0.stalls = [Box(x: 7.5, y: 9, width: 2.5, height: 6), Box(x: 10, y: 9, width: 2.5, height: 6),
                                       Box(x: 12.5, y: 9, width: 2.5, height: 6)]
                          $0.target = Box(x: 10, y: 9, width: 2.5, height: 6)
-                         $0.cars = [Box(x: 7.85, y: 10, width: 1.8, height: 4.2), Box(x: 12.85, y: 10, width: 1.8, height: 4.2)]
+                         $0.cars = [Box(x: 7.79, y: 9.6, width: 1.92, height: 4.75), Box(x: 12.79, y: 9.6, width: 1.92, height: 4.75)]
                          $0.aisleEdge = 3
                      }),
             Scenario(group: "挑战", name: "地库柱子", hint: "车位口右边有根柱子，车身别刮到",
@@ -229,10 +241,10 @@ struct Scenario: Identifiable, Hashable {
                          $0.aisleEdge = 3
                      }),
             Scenario(group: "侧方停车", name: "侧方停车", hint: "和前车并排停好，先打右倒进去，再回左摆正",
-                     start: Pose(x: 17.4, y: 7.5, heading: 0), layout: Layout(
-                         stalls: [Box(x: 8.3, y: 9.3, width: 6.8, height: 2.3)],
-                         target: Box(x: 8.3, y: 9.3, width: 6.8, height: 2.3),
-                         cars: [Box(x: 3.9, y: 9.6, width: 4.2, height: 1.8), Box(x: 15.3, y: 9.6, width: 4.2, height: 1.8)],
+                     start: Pose(x: 17.7, y: 7.6, heading: 0), layout: Layout(
+                         stalls: [Box(x: 8.15, y: 9.4, width: 7.05, height: 2.4)],
+                         target: Box(x: 8.15, y: 9.4, width: 7.05, height: 2.4),
+                         cars: [Box(x: 3.3, y: 9.6, width: 4.75, height: 1.92), Box(x: 15.3, y: 9.6, width: 4.75, height: 1.92)],
                          aisleEdge: 3, backEdge: 11.8)),
         ]
     }()
