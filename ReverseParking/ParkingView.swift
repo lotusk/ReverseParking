@@ -355,7 +355,7 @@ struct ParkingCanvas: View {
                                with: .color(lineColor), lineWidth: 2)
                 for (i, x) in stride(from: 1.0, through: 21.0, by: 3.2).enumerated() {
                     drawSedan(context, at: point(Vector(x: x + 1.6, y: edge - 2.7)), heading: .pi / 2, scale: scale,
-                              paint: [Color(white: 0.4), Color(white: 0.85), Color(red: 0.25, green: 0.3, blue: 0.4)][i % 3])
+                              paint: Color(uiColor: ParkedPaint.row(i)))
                 }
             } else {
                 context.stroke(line(Vector(x: 1, y: 3.5), Vector(x: 23, y: 3.5)),
@@ -363,11 +363,9 @@ struct ParkingCanvas: View {
                                style: StrokeStyle(lineWidth: 2, dash: [14, 12]))
             }
 
-            let parkedPaint: [Color] = [Color(white: 0.55), Color(red: 0.45, green: 0.32, blue: 0.22), Color(white: 0.9),
-                                        Color(white: 0.3), Color(red: 0.2, green: 0.35, blue: 0.6)]
             for (i, b) in l.cars.enumerated() {
                 drawSedan(context, at: point(Vector(x: b.x + b.width / 2, y: b.y + b.height / 2)),
-                          heading: b.height > b.width ? -.pi / 2 : 0, scale: scale, paint: parkedPaint[i % parkedPaint.count],
+                          heading: b.height > b.width ? -.pi / 2 : 0, scale: scale, paint: Color(uiColor: ParkedPaint.bay(i)),
                           length: max(b.width, b.height), width: min(b.width, b.height))
             }
             for b in l.pillars {

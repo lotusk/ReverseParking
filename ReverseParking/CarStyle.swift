@@ -28,6 +28,17 @@ enum CarPaint: String, CaseIterable, Identifiable {
     var color: Color { Color(uiColor: uiColor) }
 }
 
+// Shared by the top view and the 3D view so each parked car has the same colour in both.
+enum ParkedPaint {
+    static let all: [UIColor] = [
+        UIColor(white: 0.55, alpha: 1), UIColor(red: 0.45, green: 0.32, blue: 0.22, alpha: 1), UIColor(white: 0.95, alpha: 1),
+        UIColor(white: 0.25, alpha: 1), UIColor(red: 0.2, green: 0.35, blue: 0.6, alpha: 1), UIColor(white: 0.75, alpha: 1),
+        UIColor(white: 0.1, alpha: 1), UIColor(red: 0.6, green: 0.1, blue: 0.1, alpha: 1),
+    ]
+    static func bay(_ i: Int) -> UIColor { all[i % all.count] }
+    static func row(_ i: Int) -> UIColor { all[(i + 2) % all.count] }
+}
+
 // Top view of a sedan in the style of a Model 3, drawn in metres around the car centre.
 // Car-local x points forward, y points to the car's right.
 func drawSedan(_ context: GraphicsContext, at center: CGPoint, heading: Double, scale: CGFloat,

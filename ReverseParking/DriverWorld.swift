@@ -128,11 +128,8 @@ final class DriverWorld {
         add(Self.box(t.width - 0.2, 0.005, t.height - 0.2, UIColor.systemGreen.withAlphaComponent(0.35),
                      at: SCNVector3(Float(t.x + t.width / 2), 0.006, Float(t.y + t.height / 2))))
 
-        let colors: [UIColor] = [UIColor(white: 0.55, alpha: 1), UIColor(red: 0.45, green: 0.32, blue: 0.22, alpha: 1), .white,
-                                 UIColor(white: 0.25, alpha: 1), UIColor(red: 0.2, green: 0.35, blue: 0.6, alpha: 1),
-                                 UIColor(white: 0.75, alpha: 1), UIColor(white: 0.1, alpha: 1), UIColor(red: 0.6, green: 0.1, blue: 0.1, alpha: 1)]
         for (i, b) in l.cars.enumerated() {
-            add(Self.parkedCar(b, color: colors[i % colors.count]))
+            add(Self.parkedCar(b, color: ParkedPaint.bay(i)))
         }
         for b in l.pillars {
             let c = SCNVector3(Float(b.x + b.width / 2), 0, Float(b.y + b.height / 2))
@@ -144,7 +141,7 @@ final class DriverWorld {
             add(Self.box(24, 0.18, 0.2, .systemYellow, at: SCNVector3(12, 0.09, Float(l.aisleEdge - 0.1))))
             for (i, x) in stride(from: 1.0, through: 21.0, by: 3.2).enumerated() {
                 add(Self.parkedCar(Box(x: x + 0.64, y: l.aisleEdge - 5.0, width: 1.92, height: 4.6),
-                                   color: colors[(i + 2) % colors.count], noseDown: true))
+                                   color: ParkedPaint.row(i), noseDown: true))
             }
         } else {
             add(Self.box(24, wallHeight, 0.2, concrete, at: SCNVector3(12, 0.6, 0.2)))
