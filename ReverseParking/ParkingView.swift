@@ -18,7 +18,7 @@ struct ParkingView: View {
     @Environment(\.scenePhase) private var phase
     @Environment(\.dismiss) private var dismiss
     private let timer = Timer.publish(every: 1.0 / 60, on: .main, in: .common).autoconnect()
-    static let maxWheel = 270.0
+    static let maxWheel = 360.0
 
     private var fit: ParkingModel.Fit? { ParkingModel.fit(model.pose, in: model.layout) }
 
@@ -185,7 +185,7 @@ struct ParkingView: View {
                 Section("怎么练") {
                 Text("Hold 模式：按住左边电门车才走，松开立即停住。")
                 Text("左手拇指管电门，右手拇指转方向盘。")
-                Text("手指按住方向盘转圈，或在上面左右划。左右各转 3/4 圈打满。")
+                Text("手指按住方向盘转圈，或在上面左右划。左右各转 1 圈打满。回到正中会轻震一下，松手时离正中很近会自动对正。")
                 Text("方向盘松手不会自己回正，和真车一样。点「回正」一键回正。")
                 Text("黄线是车尾两角会走的路线（D 挡时是车头）。")
                 Text("驾驶视角：挂 R 自动切倒车影像，红黄绿线分别是 0.5、1、2 米。后视镜在 R 挡会自动下压。")
@@ -226,7 +226,10 @@ struct SteeringWheel: View {
             .contentShape(Rectangle())
             .gesture(DragGesture(minimumDistance: 0)
                 .onChanged { value in
-                    let touch = atan2(value.location.y - center.y, value.location.x - center.x) * 180 / .pi
+                    let dx = value.location.x - center.x, dy = value.location.y - center.y
+                    // Near the hub a tiny finger move is a huge angle, so ignore it.
+                    guard hypot(dx, dy) > side * 0.18 else { lastTouch = nil; return }
+                    let touch = atan2(dy, dx) * 180 / .pi
                     if let last = lastTouch {
                         var delta = touch - last
                         if delta > 180 { delta -= 360 }
@@ -235,15 +238,23 @@ struct SteeringWheel: View {
                     }
                     lastTouch = touch
                 }
-                .onEnded { _ in lastTouch = nil })
+                .onEnded { _ in
+                    lastTouch = nil
+                    if abs(angle) < 4 { angle = 0 }
+                })
         }
+        .sensoryFeedback(.selection, trigger: detent)
         .accessibilityLabel("方向盘")
         .accessibilityValue(label)
     }
 
+    private var detent: Int {
+        abs(angle) >= maxAngle ? (angle > 0 ? 2 : -2) : abs(angle) < 4 ? 0 : (angle > 0 ? 1 : -1)
+    }
+
     private var label: String {
         let turns = abs(angle) / 360
-        if abs(angle) < 5 { return "方向正" }
+        if abs(angle) < 4 { return "方向正" }
         return String(format: "%@ %.2f 圈", angle < 0 ? "左" : "右", turns)
     }
 

@@ -28,8 +28,9 @@ No logos or brand names are used.
 
 - Portrait. Pick R, P or D.
 - Hold mode, like a Tesla: the car only moves while you hold the pedal (left). Let go and it stops.
-- Turn the wheel (right) by dragging around it or swiping across it. 3/4 turn each way is full lock.
-- The wheel does not center itself. Tap 回正 to center it.
+- Turn the wheel (right) by dragging around it or swiping across it. One turn each way is full lock.
+  A light tick when you pass the center or hit full lock. Let go within 4° of center and it snaps straight.
+- The wheel does not center itself. Tap 回正 to center it. Touches near the hub are ignored.
 - Park fully inside the green bay, then let go. It only counts when the car is within 3° of straight
   and within 0.3 m of the middle of the bay. Within 1.5° and 0.15 m is 完美.
 - If you stop inside but not straight enough, the status line says why (tilt in degrees, left/right offset).
