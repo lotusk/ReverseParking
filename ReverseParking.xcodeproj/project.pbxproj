@@ -13,6 +13,10 @@
 		00000000000000000000000F /* DriverWorld.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000005 /* DriverWorld.swift */; };
 		000000000000000000000010 /* DriverView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000006 /* DriverView.swift */; };
 		000000000000000000000011 /* CarStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000007 /* CarStyle.swift */; };
+		000000000000000000000031 /* Game.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000021 /* Game.swift */; };
+		000000000000000000000032 /* Controls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000022 /* Controls.swift */; };
+		000000000000000000000033 /* ParkingCanvas.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000023 /* ParkingCanvas.swift */; };
+		000000000000000000000034 /* CarMesh.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000024 /* CarMesh.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -22,6 +26,10 @@
 		000000000000000000000005 /* DriverWorld.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriverWorld.swift; sourceTree = "<group>"; };
 		000000000000000000000006 /* DriverView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriverView.swift; sourceTree = "<group>"; };
 		000000000000000000000007 /* CarStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarStyle.swift; sourceTree = "<group>"; };
+		000000000000000000000021 /* Game.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Game.swift; sourceTree = "<group>"; };
+		000000000000000000000022 /* Controls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Controls.swift; sourceTree = "<group>"; };
+		000000000000000000000023 /* ParkingCanvas.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParkingCanvas.swift; sourceTree = "<group>"; };
+		000000000000000000000024 /* CarMesh.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarMesh.swift; sourceTree = "<group>"; };
 		A00000000000000000000006 /* ReverseParking.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ReverseParking.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -53,6 +61,10 @@
 				000000000000000000000007 /* CarStyle.swift */,
 				000000000000000000000006 /* DriverView.swift */,
 				000000000000000000000005 /* DriverWorld.swift */,
+				000000000000000000000024 /* CarMesh.swift */,
+				000000000000000000000023 /* ParkingCanvas.swift */,
+				000000000000000000000022 /* Controls.swift */,
+				000000000000000000000021 /* Game.swift */,
 			);
 			path = ReverseParking;
 			sourceTree = "<group>";
@@ -122,6 +134,10 @@
 				000000000000000000000011 /* CarStyle.swift in Sources */,
 				000000000000000000000010 /* DriverView.swift in Sources */,
 				00000000000000000000000F /* DriverWorld.swift in Sources */,
+				000000000000000000000034 /* CarMesh.swift in Sources */,
+				000000000000000000000033 /* ParkingCanvas.swift in Sources */,
+				000000000000000000000032 /* Controls.swift in Sources */,
+				000000000000000000000031 /* Game.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

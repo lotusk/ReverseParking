@@ -14,13 +14,22 @@ check(ParkingModel.parked(Pose(x: 11.6, y: 12, heading: -.pi / 2)), "Valid bay p
 check(!ParkingModel.parked(Pose(x: 11.6, y: 12, heading: 0)), "Reject sideways parking")
 check(!ParkingModel.parked(Pose(x: 10.2, y: 12, heading: -.pi / 2)), "Reject partial parking")
 var game = ParkingModel()
-game.pose = Pose(x: 11.6, y: 12, heading: -.pi / 2)
-game.driving = true
-game.step(1.0 / 60)
-check(!game.won, "Must stop before success")
-game.driving = false
-game.step(1.0 / 60)
-check(game.won, "Stopped parking succeeds")
+game.pose = Pose(x: 11.6, y: 11.9, heading: -.pi / 2)
+game.gear = -1
+game.throttle = 1
+for _ in 0..<12 { game.step(1.0 / 60) }
+check(game.speed < 0 && game.speed > -0.4 && !game.won, "Speed builds up gradually, and moving is not parked")
+game.throttle = 0
+for _ in 0..<60 { game.step(1.0 / 60) }
+check(game.speed == 0 && game.won, "Letting go brakes to a stop, then parking counts")
+var run = ParkingModel()
+run.gear = 1
+run.throttle = 0.5
+for _ in 0..<180 { run.step(1.0 / 60) }
+check(abs(run.speed - ParkingModel.topSpeed / 2) < 0.001, "Half pedal holds half speed")
+let zones = ParkingModel.sensors(Pose(x: 11.6, y: 12, heading: -.pi / 2), in: .standard)
+check(zones.count == 12 && abs(zones[4] - 2.44) < 0.01 && abs(zones[7] - 1.325) < 0.01 && abs(zones[10] - 2.22) < 0.01,
+      "Sensors read the right side, the rear and the left side")
 // A feasible reverse arc from the starting lane, then a straight finish.
 var p = Pose()
 let radius = ParkingModel.wheelbase / tan(Double.pi / 5)
@@ -37,4 +46,4 @@ check(!tilted.good && abs(tilted.angle - 5) < 0.01, "5 degrees off is not good e
 let shifted = ParkingModel.fit(Pose(x: 12.0, y: 12, heading: straight90), in: l)!
 check(!shifted.good && abs(shifted.offset - 0.4) < 0.01, "0.4 m to the right is not good enough")
 check(ParkingModel.fit(Pose(x: 11.8, y: 12, heading: straight90 + 2 * .pi / 180), in: l)!.good, "2 degrees and 0.2 m is good")
-print("All 15 model checks passed, including a collision-free parking route.")
+print("All 18 model checks passed, including a collision-free parking route.")

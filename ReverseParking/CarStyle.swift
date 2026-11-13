@@ -1,5 +1,4 @@
 import SwiftUI
-import SceneKit
 
 enum CarPaint: String, CaseIterable, Identifiable {
     case pearl, silver, blue, red, black
@@ -26,6 +25,16 @@ enum CarPaint: String, CaseIterable, Identifiable {
     }
 
     var color: Color { Color(uiColor: uiColor) }
+
+    var metalness: Double {
+        switch self {
+        case .pearl: 0.05
+        case .silver: 0.85
+        case .blue: 0.6
+        case .red: 0.4
+        case .black: 0.5
+        }
+    }
 }
 
 // Shared by the top view and the 3D view so each parked car has the same colour in both.
@@ -39,7 +48,7 @@ enum ParkedPaint {
     static func row(_ i: Int) -> UIColor { all[(i + 2) % all.count] }
 }
 
-// Top view of a sedan in the style of a Model 3, drawn in metres around the car centre.
+// Top view of the car, drawn in metres around the car centre.
 // Car-local x points forward, y points to the car's right.
 func drawSedan(_ context: GraphicsContext, at center: CGPoint, heading: Double, scale: CGFloat,
                paint: Color, steering: Double = 0, reversing: Bool = false, outline: Color? = nil,
@@ -88,118 +97,5 @@ func drawSedan(_ context: GraphicsContext, at center: CGPoint, heading: Double, 
         for y in [-0.5, 0.35] {
             c.fill(Path(rect(-2.09, y, -1.99, y + 0.15)), with: .color(.white))
         }
-    }
-}
-
-struct Sedan {
-    let node = SCNNode()
-    private let shell = SCNNode()
-    let bodyMaterial = SCNMaterial()
-    private(set) var frontWheels: [SCNNode] = []
-
-    private static let bodyShape: SCNShape = {
-        let p = UIBezierPath()
-        p.move(to: CGPoint(x: -2.04, y: 0.26))
-        p.addLine(to: CGPoint(x: -2.1, y: 0.55))
-        p.addQuadCurve(to: CGPoint(x: -1.92, y: 0.93), controlPoint: CGPoint(x: -2.12, y: 0.88))
-        p.addLine(to: CGPoint(x: -1.5, y: 0.97))
-        p.addLine(to: CGPoint(x: 1.15, y: 0.92))
-        p.addQuadCurve(to: CGPoint(x: 2.06, y: 0.6), controlPoint: CGPoint(x: 1.88, y: 0.9))
-        p.addQuadCurve(to: CGPoint(x: 1.98, y: 0.26), controlPoint: CGPoint(x: 2.14, y: 0.4))
-        p.close()
-        p.flatness = 0.01
-        let shape = SCNShape(path: p, extrusionDepth: 1.8)
-        shape.chamferRadius = 0.12
-        return shape
-    }()
-
-    private static let glassShape: SCNShape = {
-        let p = UIBezierPath()
-        p.move(to: CGPoint(x: -1.52, y: 0.93))
-        p.addQuadCurve(to: CGPoint(x: -0.55, y: 1.42), controlPoint: CGPoint(x: -1.05, y: 1.32))
-        p.addQuadCurve(to: CGPoint(x: 0.35, y: 1.43), controlPoint: CGPoint(x: -0.1, y: 1.49))
-        p.addLine(to: CGPoint(x: 1.2, y: 0.92))
-        p.close()
-        p.flatness = 0.01
-        let shape = SCNShape(path: p, extrusionDepth: 1.5)
-        shape.chamferRadius = 0.14
-        return shape
-    }()
-
-    // The shapes below are drawn for a 4.2 x 1.8 m car and scaled to the requested size.
-    init(paint: UIColor, length: Double = ParkingModel.length, width: Double = ParkingModel.width, interior: Bool = false) {
-        shell.scale = SCNVector3(Float(length / 4.2), 1.06, Float(width / 1.8))
-        node.addChildNode(shell)
-        bodyMaterial.diffuse.contents = paint
-        bodyMaterial.specular.contents = UIColor(white: 0.7, alpha: 1)
-        bodyMaterial.shininess = 0.5
-        let body = SCNNode(geometry: Self.bodyShape.copy() as? SCNGeometry)
-        body.geometry?.materials = [bodyMaterial]
-        shell.addChildNode(body)
-
-        let glass = SCNMaterial()
-        glass.diffuse.contents = UIColor(red: 0.04, green: 0.05, blue: 0.07, alpha: 1)
-        glass.specular.contents = UIColor(white: 0.9, alpha: 1)
-        glass.shininess = 0.8
-        let roof = SCNNode(geometry: Self.glassShape.copy() as? SCNGeometry)
-        roof.geometry?.materials = [glass]
-        shell.addChildNode(roof)
-
-        let tire = SCNMaterial()
-        tire.diffuse.contents = UIColor(white: 0.06, alpha: 1)
-        let rim = SCNMaterial()
-        rim.diffuse.contents = UIColor(white: 0.55, alpha: 1)
-        rim.specular.contents = UIColor.white
-        for x in [1.3, -1.3] {
-            for z in [-0.8, 0.8] {
-                let pivot = SCNNode()
-                pivot.position = SCNVector3(Float(x), 0.34, Float(z))
-                let wheel = SCNNode(geometry: SCNCylinder(radius: 0.34, height: 0.24))
-                wheel.geometry?.materials = [tire]
-                wheel.eulerAngles.x = .pi / 2
-                let cap = SCNNode(geometry: SCNCylinder(radius: 0.24, height: 0.25))
-                cap.geometry?.materials = [rim]
-                wheel.addChildNode(cap)
-                pivot.addChildNode(wheel)
-                shell.addChildNode(pivot)
-                if x > 0 { frontWheels.append(pivot) }
-            }
-        }
-
-        let head = Self.material(.white, glow: true)
-        for z in [-0.58, 0.58] {
-            let lamp = SCNNode(geometry: SCNBox(width: 0.06, height: 0.05, length: 0.36, chamferRadius: 0.02))
-            lamp.geometry?.materials = [head]
-            lamp.position = SCNVector3(2.0, 0.68, Float(z))
-            lamp.eulerAngles.y = Float(z > 0 ? 0.35 : -0.35)
-            shell.addChildNode(lamp)
-        }
-        let tail = SCNNode(geometry: SCNBox(width: 0.05, height: 0.06, length: 1.55, chamferRadius: 0.02))
-        tail.geometry?.materials = [Self.material(UIColor(red: 0.9, green: 0.05, blue: 0.08, alpha: 1), glow: true)]
-        tail.position = SCNVector3(-2.08, 0.8, 0)
-        shell.addChildNode(tail)
-
-        if interior {
-            let dash = SCNNode(geometry: SCNBox(width: 0.55, height: 0.06, length: 1.6, chamferRadius: 0.03))
-            dash.geometry?.materials = [Self.material(UIColor(white: 0.12, alpha: 1))]
-            dash.position = SCNVector3(0.68, 0.97, 0)
-            shell.addChildNode(dash)
-            let screen = SCNNode(geometry: SCNBox(width: 0.02, height: 0.19, length: 0.32, chamferRadius: 0.01))
-            screen.geometry?.materials = [Self.material(UIColor(red: 0.12, green: 0.17, blue: 0.24, alpha: 1), glow: true)]
-            screen.position = SCNVector3(0.72, 1.06, 0.05)
-            screen.eulerAngles.z = 0.25
-            shell.addChildNode(screen)
-        }
-    }
-
-    func steer(_ steering: Double) {
-        for wheel in frontWheels { wheel.eulerAngles.y = Float(-steering * .pi / 5) }
-    }
-
-    private static func material(_ color: UIColor, glow: Bool = false) -> SCNMaterial {
-        let m = SCNMaterial()
-        m.diffuse.contents = color
-        if glow { m.emission.contents = color }
-        return m
     }
 }

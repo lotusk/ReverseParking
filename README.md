@@ -1,6 +1,6 @@
 # ReverseParking
 
-iPhone app for practicing reverse parking. SwiftUI + Core Motion, iOS 17+.
+iPhone app for practicing reverse parking. SwiftUI + SceneKit, iOS 17+.
 
 ## Install on your iPhone
 
@@ -13,28 +13,44 @@ With a free Apple ID the app expires after 7 days. Run it again from Xcode to re
 
 ## Two modes
 
-The home screen has two modes. They share scenarios, gears, pedal and wheel.
+The home screen shows the car on a turntable, the paint picker, and two modes.
+Both modes share scenarios, gears, pedal and wheel.
 
-- 俯视练习: the original top-down view of the whole lot.
-- 驾驶视角: first-person 3D (SceneKit). Side mirrors at the top, a 360 heading-up minimap at the bottom right, and the nearest-obstacle distance at the bottom left.
-  - In R the main view switches to a backup camera, mirrored like a real one, with 0.5 / 1 / 2 m lines and the predicted path.
+- 俯视练习: top-down view of the whole lot.
+- 驾驶视角: first-person 3D. Side mirrors at the top, gear and speed between them,
+  a 360 heading-up minimap at the bottom right, and the nearest-obstacle distance at the bottom left.
+  - In R the main view switches to a backup camera with 0.5 / 1 / 2 m lines and the predicted path.
+  - The backup camera is mirrored like a real one (left of the screen is the left of the car).
+    The ? sheet has a switch to show it unmirrored instead.
   - In R both mirrors tilt down to show the bay lines.
 
-All cars are 4.75 x 1.92 m with a 2.89 m wheelbase (about a Model Y). They are drawn as a sedan (top view in 2D, extruded side profile in 3D) with a glass roof,
-light bar and turning front wheels. Pick the paint in the ? sheet; it is saved between launches.
+All cars are 4.75 x 1.92 m with a 2.89 m wheelbase (about a Model Y).
 No logos or brand names are used.
+
+## 3D scene
+
+- The car body is a mesh built in code (`CarMesh.swift`): cross-sections along the car, with wheel arches,
+  windows, glass roof, lamps and black trim as separate materials. Wheels roll and the front ones steer.
+- Physically based materials, light from a sky image, and one sun with soft shadows.
+- Brake lights come on when you let go of the pedal; reverse lights in R.
+- The lot has textured asphalt and concrete, wheel stops, hedges, trees, lamp posts and far buildings.
 
 ## How to play
 
-- Portrait. Pick R, P or D.
-- Hold mode, like a Tesla: the car only moves while you hold the pedal (left). Let go and it stops.
-- Turn the wheel (right) by dragging around it or swiping across it. One turn each way is full lock.
+- Portrait. Gears R, P, D are in the column between the pedal and the wheel.
+- Hold mode, like a Tesla: the car only moves while you touch the pedal (left). Let go and it brakes to a stop.
+- The pedal is analog. Touch low to creep, slide up to go faster. Speed changes smoothly, top speed is about 8 km/h
+  (a bit less in R).
+- Turn the wheel (right) by dragging around its rim. One turn each way is full lock.
   A light tick when you pass the center or hit full lock. Let go within 4° of center and it snaps straight.
 - The wheel does not center itself. Tap 回正 to center it. Touches near the hub are ignored.
 - Park fully inside the green bay, then let go. It only counts when the car is within 3° of straight
   and within 0.3 m of the middle of the bay. Within 1.5° and 0.15 m is 完美.
-- If you stop inside but not straight enough, the status line says why (tilt in degrees, left/right offset).
-- Yellow dashed lines show where the two rear corners will go (front corners in D).
+- As soon as a corner is inside the bay, a chip shows the tilt and offset live. Green means good enough.
+- Bars around the car in the top view are parking sensors: yellow under 1 m, orange under 0.6 m, red under 0.3 m.
+- Yellow dashed lines show where the two rear corners will go (front corners in D). The curve button at the top turns them off.
+
+The model runs once per screen refresh with the real frame time (`Game.swift`), so motion stays even.
 
 ## Scenarios
 

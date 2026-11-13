@@ -5,7 +5,7 @@ struct Vector: Equatable {
     var y: Double
 }
 
-struct Pose {
+struct Pose: Equatable {
     var x = 17.0
     var y = 6.0
     var heading = 0.0 // Screen coordinates: positive rotation is clockwise.
@@ -50,18 +50,25 @@ struct Layout: Equatable {
     }
 }
 
-struct ParkingModel {
+struct ParkingModel: Equatable {
     static let length = 4.75
     static let width = 1.92
     static let wheelbase = 2.89
+    static let topSpeed = 2.2
+    static let pickup = 1.6
+    static let braking = 3.5
     var pose = Pose()
     var layout = Layout.standard
     var steering = 0.0
     var gear = 0.0
-    var driving = false
+    var throttle = 0.0
+    var speed = 0.0
     var collision = false
     var won = false
     var distance = 0.0
+    var travelled = 0.0
+
+    var moving: Bool { abs(speed) > 0.001 }
 
     static func corners(_ p: Pose) -> [Vector] {
         [(-length / 2, -width / 2), (length / 2, -width / 2),
@@ -94,25 +101,34 @@ struct ParkingModel {
         return points.contains { outside($0, l) } || l.obstacles.contains { overlaps(points, $0.corners) }
     }
 
-    static func clearance(_ p: Pose, in l: Layout) -> Double {
+    static func gap(_ v: Vector, in l: Layout) -> Double {
+        var d = min(v.x - l.leftEdge, v.y - l.aisleEdge, l.backEdge - v.y, l.rightEdge - v.x)
+        if v.y > 9 { d = min(d, 23.7 - v.x, v.x - 0.3) }
+        for b in l.obstacles {
+            let dx = max(b.x - v.x, 0, v.x - b.x - b.width)
+            let dy = max(b.y - v.y, 0, v.y - b.y - b.height)
+            d = min(d, hypot(dx, dy))
+        }
+        return d
+    }
+
+    // Twelve sensor zones around the body, clockwise from the front left corner.
+    // Each zone is a short stretch of the outline: three across each end, three along each side.
+    static func sensors(_ p: Pose, in l: Layout) -> [Double] {
         let c = corners(p)
-        let samples = c.indices.flatMap { i -> [Vector] in
-            let a = c[i], b = c[(i + 1) % c.count]
-            return (0..<6).map { k in
-                let t = Double(k) / 6
-                return Vector(x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t)
+        let edges = [(c[1], c[2]), (c[2], c[3]), (c[3], c[0]), (c[0], c[1])]
+        return edges.flatMap { a, b in
+            (0..<3).map { zone in
+                (0...4).map { k -> Double in
+                    let t = (Double(zone) + Double(k) / 4) / 3
+                    return gap(Vector(x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t), in: l)
+                }.min()!
             }
         }
-        return samples.map { v in
-            var d = min(v.x - l.leftEdge, v.y - l.aisleEdge, l.backEdge - v.y, l.rightEdge - v.x)
-            if v.y > 9 { d = min(d, 23.7 - v.x, v.x - 0.3) }
-            for b in l.obstacles {
-                let dx = max(b.x - v.x, 0, v.x - b.x - b.width)
-                let dy = max(b.y - v.y, 0, v.y - b.y - b.height)
-                d = min(d, hypot(dx, dy))
-            }
-            return d
-        }.min() ?? 0
+    }
+
+    static func clearance(_ p: Pose, in l: Layout) -> Double {
+        sensors(p, in: l).min() ?? 0
     }
 
     struct Fit {
@@ -122,16 +138,29 @@ struct ParkingModel {
         var perfect: Bool { angle <= 1.5 && abs(offset) <= 0.15 }
     }
 
-    // Angle is in degrees from straight; offset is metres from the middle of the bay, positive to the car's right
-    // for a backed-in bay and toward the curb for a parallel space. Nil when the car is not fully inside.
+    // Angle is in degrees from straight, positive when the nose points clockwise of straight.
+    // Offset is metres from the middle of the bay, positive to the car's right for a backed-in bay
+    // and toward the curb for a parallel space.
+    static func alignment(_ p: Pose, in l: Layout) -> (angle: Double, offset: Double) {
+        let t = l.target
+        let error = l.parallel ? remainder(p.heading, .pi) : remainder(p.heading + .pi / 2, 2 * .pi)
+        let offset = l.parallel ? p.y - (t.y + t.height / 2) : p.x - (t.x + t.width / 2)
+        return (error * 180 / .pi, offset)
+    }
+
+    static func entering(_ p: Pose, in l: Layout) -> Bool {
+        let t = l.target
+        return corners(p).contains { $0.x > t.x && $0.x < t.x + t.width && $0.y > t.y && $0.y < t.y + t.height }
+    }
+
+    // Nil when the car is not fully inside the bay.
     static func fit(_ p: Pose, in l: Layout) -> Fit? {
         let t = l.target
         guard corners(p).allSatisfy({
             $0.x > t.x + 0.05 && $0.x < t.x + t.width - 0.05 && $0.y > t.y + 0.05 && $0.y < t.y + t.height - 0.05
         }) else { return nil }
-        let error = l.parallel ? remainder(p.heading, .pi) : remainder(p.heading + .pi / 2, 2 * .pi)
-        let offset = l.parallel ? p.y - (t.y + t.height / 2) : p.x - (t.x + t.width / 2)
-        return Fit(angle: abs(error) * 180 / .pi, offset: offset)
+        let a = alignment(p, in: l)
+        return Fit(angle: abs(a.angle), offset: a.offset)
     }
 
     static func parked(_ p: Pose, in l: Layout = .standard) -> Bool {
@@ -144,18 +173,25 @@ struct ParkingModel {
                     y: p.y + travel * sin(p.heading + turn / 2), heading: p.heading + turn)
     }
 
+    // Hold mode: the pedal sets a target speed, and letting go brakes to a stop.
     mutating func step(_ dt: Double) {
-        guard !won else { driving = false; return }
-        guard driving else {
-            won = Self.parked(pose, in: layout)
+        let dt = max(0, min(dt, 0.05))
+        let target = won ? 0 : gear * max(0, min(1, throttle)) * Self.topSpeed * (gear < 0 ? 0.8 : 1)
+        let slowing = abs(target) < abs(speed) || target * speed < 0
+        let rate = (slowing ? Self.braking : Self.pickup) * dt
+        speed += max(-rate, min(rate, target - speed))
+        guard moving else {
+            speed = 0
+            if !won && throttle == 0 { won = Self.parked(pose, in: layout) }
             return
         }
-        let travel = gear * 1.0 * max(0, min(dt, 0.04))
+        let travel = speed * dt
         let candidate = Self.advanced(pose, steering: steering, travel: travel)
         collision = Self.blocked(candidate, in: layout)
-        if collision { driving = false; return }
+        if collision { speed = 0; return }
         pose = candidate
         distance += abs(travel)
+        travelled += travel
     }
 
     var onLine: Bool {
@@ -166,7 +202,7 @@ struct ParkingModel {
     }
 
     var noseIn: Bool {
-        guard !driving, !layout.parallel else { return false }
+        guard !moving, !layout.parallel else { return false }
         let t = layout.target
         return sin(pose.heading) > 0.9 && Self.corners(pose).allSatisfy {
             $0.x > t.x && $0.x < t.x + t.width && $0.y > t.y && $0.y < t.y + t.height

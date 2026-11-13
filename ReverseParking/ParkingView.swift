@@ -1,5 +1,4 @@
 import SwiftUI
-import Combine
 
 enum PracticeMode: String, Hashable {
     case topDown, driver
@@ -7,164 +6,82 @@ enum PracticeMode: String, Hashable {
 
 struct ParkingView: View {
     let mode: PracticeMode
-    @State private var world = DriverWorld()
-    @State private var scenario = Scenario.all[0]
-    @State private var model = ParkingModel(scenario: Scenario.all[0])
-    @State private var wheelAngle = 0.0
-    @State private var pressing = false
-    @State private var showGuide = true
+    @State private var game: Game
     @AppStorage("paint") private var paint = CarPaint.pearl
+    @AppStorage("rawRearView") private var rawRearView = false
     @State private var showHelp = false
     @Environment(\.scenePhase) private var phase
     @Environment(\.dismiss) private var dismiss
-    private let timer = Timer.publish(every: 1.0 / 60, on: .main, in: .common).autoconnect()
-    static let maxWheel = 360.0
 
-    private var fit: ParkingModel.Fit? { ParkingModel.fit(model.pose, in: model.layout) }
-
-    private var status: String {
-        if model.won, let f = fit {
-            return String(format: "%@ · 歪 %.1f° · 偏 %.2f 米", f.perfect ? "完美入库" : "入库成功", f.angle, abs(f.offset))
-        }
-        if model.collision { return "碰到了 · 换挡驶离" }
-        if model.noseIn { return "车头朝里了，要倒进去才算" }
-        if !pressing, let f = fit, !f.good { return advice(f) }
-        if model.onLine { return "压线了，调整方向" }
-        if model.gear == 0 { return scenario.hint }
-        if !pressing { return model.gear < 0 ? "R · 按住电门倒车" : "D · 按住电门前进" }
-        return model.gear < 0 ? "R 倒车中" : "D 前进中"
-    }
-
-    private func advice(_ f: ParkingModel.Fit) -> String {
-        var parts: [String] = []
-        if f.angle > 3 { parts.append(String(format: "歪了 %.1f°", f.angle)) }
-        if abs(f.offset) > 0.3 {
-            let side = model.layout.parallel ? (f.offset > 0 ? "太靠路边" : "离路边太远") : (f.offset > 0 ? "偏右" : "偏左")
-            parts.append(String(format: "%@ %.2f 米", side, abs(f.offset)))
-        }
-        return "已进库，" + parts.joined(separator: "，") + "，再调正"
+    init(mode: PracticeMode) {
+        self.mode = mode
+        _game = State(initialValue: Game(driver: mode == .driver))
     }
 
     var body: some View {
-        VStack(spacing: 12) {
+        @Bindable var game = game
+        VStack(spacing: 10) {
             topBar
-            Group {
-                if mode == .driver {
-                    DriverPanel(world: world, model: model, showGuide: showGuide, paint: paint)
-                } else {
-                    ParkingCanvas(model: model, showGuide: showGuide, paint: paint)
-                }
+            StatusLine(game: game)
+            Viewport(game: game, paint: paint)
+                .clipShape(RoundedRectangle(cornerRadius: 18))
+            HStack(spacing: 12) {
+                Pedal(value: $game.pedal)
+                GearColumn(game: game)
+                SteeringWheel(angle: $game.wheelAngle, maxAngle: Game.maxWheel)
             }
-            .clipShape(RoundedRectangle(cornerRadius: 18))
-            gearBar
-            HStack(spacing: 14) {
-                pedal
-                SteeringWheel(angle: $wheelAngle, maxAngle: Self.maxWheel)
-            }
-            .frame(height: mode == .driver ? 200 : 230)
+            .frame(height: 214)
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 8)
         .background(Color(red: 0.03, green: 0.05, blue: 0.08))
-        .sensoryFeedback(.error, trigger: model.collision) { _, hit in hit }
-        .sensoryFeedback(.success, trigger: model.won) { _, won in won }
         .sheet(isPresented: $showHelp) { help }
         .toolbar(.hidden, for: .navigationBar)
         .onAppear {
             UIApplication.shared.isIdleTimerDisabled = true
-            if mode == .driver { world.update(model, showGuide: showGuide, paint: paint) }
+            game.paint = paint
+            game.start()
         }
-        .onDisappear { UIApplication.shared.isIdleTimerDisabled = false }
-        .onChange(of: scenario) { restart() }
-        .onChange(of: phase) { _, value in if value != .active { model.gear = 0 } }
-        .onReceive(timer) { _ in
-            guard phase == .active else { return }
-            model.steering = wheelAngle / Self.maxWheel
-            model.driving = model.gear != 0 && pressing && !showHelp
-            model.step(1.0 / 60)
-            if mode == .driver { world.update(model, showGuide: showGuide, paint: paint) }
+        .onDisappear {
+            UIApplication.shared.isIdleTimerDisabled = false
+            game.stop()
         }
-    }
-
-    private func restart() {
-        model = ParkingModel(scenario: scenario)
-        wheelAngle = 0
+        .onChange(of: paint) { game.paint = paint }
+        .onChange(of: showHelp) { game.paused = showHelp }
+        .onChange(of: phase) { _, value in
+            if value == .active { game.start() } else { game.stop(); game.shift(0) }
+        }
     }
 
     private var topBar: some View {
-        VStack(alignment: .leading, spacing: 6) {
-        HStack {
+        HStack(spacing: 14) {
             Button { dismiss() } label: { Image(systemName: "chevron.left") }
-                .padding(.trailing, 6)
             Menu {
                 ForEach(Scenario.groups, id: \.self) { group in
                     Section(group) {
                         ForEach(Scenario.all.filter { $0.group == group }) { item in
-                            Button { scenario = item } label: {
-                                if item == scenario { Label(item.name, systemImage: "checkmark") } else { Text(item.name) }
+                            Button { game.scenario = item } label: {
+                                if item == game.scenario { Label(item.name, systemImage: "checkmark") } else { Text(item.name) }
                             }
                         }
                     }
                 }
             } label: {
                 HStack(spacing: 4) {
-                    Text(scenario.name).font(.headline)
+                    Text(game.scenario.name).font(.headline)
                     Image(systemName: "chevron.down").font(.caption.bold())
                 }
             }
             Spacer()
-            Button(action: restart) { Image(systemName: "arrow.counterclockwise") }
+            Button { game.showGuide.toggle() } label: {
+                Image(systemName: "point.topleft.down.to.point.bottomright.curvepath")
+                    .foregroundStyle(game.showGuide ? Color.accentColor : .gray)
+            }
+            Button { game.restart() } label: { Image(systemName: "arrow.counterclockwise") }
             Button { showHelp = true } label: { Image(systemName: "questionmark.circle") }
-                .padding(.leading, 12)
-        }
-        Text(status)
-            .font(.subheadline)
-            .foregroundStyle(model.won ? .green : model.collision ? .red : model.onLine ? .yellow : .secondary)
-            .lineLimit(1)
         }
         .font(.title3)
         .padding(.top, 4)
-    }
-
-    private var gearBar: some View {
-        HStack(spacing: 8) {
-            gearButton("R", value: -1, color: .orange)
-            gearButton("P", value: 0, color: .gray)
-            gearButton("D", value: 1, color: .blue)
-            Toggle(isOn: $showGuide) { Image(systemName: "point.topleft.down.to.point.bottomright.curvepath") }
-                .toggleStyle(.button)
-                .frame(width: 56)
-        }
-        .frame(height: 50)
-    }
-
-    private func gearButton(_ title: String, value: Double, color: Color) -> some View {
-        let selected = model.gear == value
-        return Button { model.gear = value } label: {
-            Text(title)
-                .font(.system(size: 24, weight: .bold, design: .rounded))
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(selected ? color : Color.white.opacity(0.08))
-                .foregroundStyle(selected ? .white : .gray)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-        }
-        .buttonStyle(.plain)
-    }
-
-    private var pedal: some View {
-        VStack(spacing: 8) {
-            Image(systemName: pressing ? "pedal.accelerator.fill" : "pedal.accelerator").font(.system(size: 34))
-            Text(pressing ? "松开停车" : "按住走").font(.subheadline.bold())
-        }
-        .frame(width: 92)
-        .frame(maxHeight: .infinity)
-        .background(pressing ? Color.green.opacity(0.85) : Color.white.opacity(0.08))
-        .clipShape(RoundedRectangle(cornerRadius: 18))
-        .contentShape(Rectangle())
-        .gesture(DragGesture(minimumDistance: 0)
-            .onChanged { _ in pressing = true }
-            .onEnded { _ in pressing = false })
-        .accessibilityLabel("按住电门走，松开停车")
     }
 
     private var help: some View {
@@ -182,228 +99,98 @@ struct ParkingView: View {
                     .pickerStyle(.inline)
                     .labelsHidden()
                 }
+                if mode == .driver {
+                    Section {
+                        Picker("倒车影像", selection: $rawRearView) {
+                            Text("镜像（和真车一样）").tag(false)
+                            Text("回头看（不镜像）").tag(true)
+                        }
+                        .pickerStyle(.inline)
+                        .labelsHidden()
+                    } header: {
+                        Text("倒车影像")
+                    } footer: {
+                        Text("真车的倒车影像是镜像的：画面左边就是车的左边，和后视镜一致。「回头看」是你转头从后窗看出去的样子，左右相反。")
+                    }
+                }
                 Section("怎么练") {
-                Text("Hold 模式：按住左边电门车才走，松开立即停住。")
-                Text("左手拇指管电门，右手拇指转方向盘。")
-                Text("手指按住方向盘转圈，或在上面左右划。左右各转 1 圈打满。回到正中会轻震一下，松手时离正中很近会自动对正。")
-                Text("方向盘松手不会自己回正，和真车一样。点「回正」一键回正。")
-                Text("黄线是车尾两角会走的路线（D 挡时是车头）。")
-                Text("驾驶视角：挂 R 自动切倒车影像，红黄绿线分别是 0.5、1、2 米。后视镜在 R 挡会自动下压。")
-                Text("右下角小图以车为中心、车头朝上，左下角是离障碍物最近的距离。")
-                Text("车完全进绿色车位，车身歪不超过 3°、左右偏不超过 0.3 米，停下才算成功。1.5° 和 0.15 米以内算完美。")
+                    Text("Hold 模式：按住左边电门车才走，松开自动刹停。")
+                    Text("电门能控制快慢：按在下面慢慢挪，手指往上滑更快。起步和停车都是平顺的。")
+                    Text("中间一列是挡位。左手拇指管电门，右手拇指转方向盘。")
+                    Text("手指按住方向盘外圈转。左右各转 1 圈打满。回到正中会轻震一下，松手时离正中很近会自动对正。")
+                    Text("方向盘松手不会自己回正，和真车一样。点「回正」一键回正。")
+                    Text("黄线是车尾两角会走的路线（D 挡时是车头）。右上角的曲线按钮可以关掉。")
+                    Text("驾驶视角：挂 R 自动切倒车影像，红黄绿线分别是 0.5、1、2 米。后视镜在 R 挡会自动下压。")
+                    Text("小图以车为中心、车头朝上。车身周围的色条是雷达：黄 1 米内，橙 0.6 米内，红 0.3 米内。")
+                    Text("车一进车位，左下角会实时显示歪了几度、偏了多少，变绿就是合格。")
+                    Text("车完全进绿色车位，车身歪不超过 3°、左右偏不超过 0.3 米，停下才算成功。1.5° 和 0.15 米以内算完美。")
                 }
             }
             .navigationTitle("设置与说明")
             .toolbar { Button("知道了") { showHelp = false } }
         }
-        .presentationDetents([.medium])
+        .presentationDetents([.medium, .large])
     }
 }
 
-struct SteeringWheel: View {
-    @Binding var angle: Double
-    let maxAngle: Double
-    @State private var lastTouch: Double?
+private struct StatusLine: View {
+    let game: Game
 
     var body: some View {
-        GeometryReader { geo in
-            let side = min(geo.size.width, geo.size.height)
-            let center = CGPoint(x: geo.size.width / 2, y: geo.size.height / 2)
-            ZStack {
-                wheel(side: side)
-                    .rotationEffect(.degrees(angle))
-                    .position(center)
-                VStack {
-                    Spacer()
-                    HStack {
-                        Text(label).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
-                        Spacer()
-                        Button("回正") { withAnimation(.easeOut(duration: 0.25)) { angle = 0 } }
-                            .font(.caption.bold())
-                    }
-                }
-            }
-            .contentShape(Rectangle())
-            .gesture(DragGesture(minimumDistance: 0)
-                .onChanged { value in
-                    let dx = value.location.x - center.x, dy = value.location.y - center.y
-                    // Near the hub a tiny finger move is a huge angle, so ignore it.
-                    guard hypot(dx, dy) > side * 0.18 else { lastTouch = nil; return }
-                    let touch = atan2(dy, dx) * 180 / .pi
-                    if let last = lastTouch {
-                        var delta = touch - last
-                        if delta > 180 { delta -= 360 }
-                        if delta < -180 { delta += 360 }
-                        angle = max(-maxAngle, min(maxAngle, angle + delta))
-                    }
-                    lastTouch = touch
-                }
-                .onEnded { _ in
-                    lastTouch = nil
-                    if abs(angle) < 4 { angle = 0 }
-                })
+        let model = game.model
+        Text(status)
+            .font(.subheadline)
+            .foregroundStyle(model.won ? .green : model.collision ? .red : model.onLine ? .yellow : .secondary)
+            .lineLimit(1)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .sensoryFeedback(.error, trigger: model.collision) { _, hit in hit }
+            .sensoryFeedback(.success, trigger: model.won) { _, won in won }
+    }
+
+    private var status: String {
+        let model = game.model, pressing = game.pedal > 0
+        let fit = ParkingModel.fit(model.pose, in: model.layout)
+        if model.won, let f = fit {
+            return String(format: "%@ · 歪 %.1f° · 偏 %.2f 米", f.perfect ? "完美入库" : "入库成功", f.angle, abs(f.offset))
         }
-        .sensoryFeedback(.selection, trigger: detent)
-        .accessibilityLabel("方向盘")
-        .accessibilityValue(label)
+        if model.collision { return "碰到了 · 换挡驶离" }
+        if model.noseIn { return "车头朝里了，要倒进去才算" }
+        if !pressing, !model.moving, let f = fit, !f.good { return advice(f) }
+        if model.onLine { return "压线了，调整方向" }
+        if model.gear == 0 { return game.scenario.hint }
+        if !pressing { return model.gear < 0 ? "R · 按住电门倒车" : "D · 按住电门前进" }
+        return model.gear < 0 ? "R 倒车中" : "D 前进中"
     }
 
-    private var detent: Int {
-        abs(angle) >= maxAngle ? (angle > 0 ? 2 : -2) : abs(angle) < 4 ? 0 : (angle > 0 ? 1 : -1)
-    }
-
-    private var label: String {
-        let turns = abs(angle) / 360
-        if abs(angle) < 4 { return "方向正" }
-        return String(format: "%@ %.2f 圈", angle < 0 ? "左" : "右", turns)
-    }
-
-    private func wheel(side: CGFloat) -> some View {
-        let d = side * 0.92
-        return ZStack {
-            Circle().stroke(Color(white: 0.75), lineWidth: d * 0.09)
-            ForEach([90.0, 210.0, 330.0], id: \.self) { a in
-                Capsule()
-                    .fill(Color(white: 0.55))
-                    .frame(width: d * 0.42, height: d * 0.07)
-                    .offset(x: d * 0.21)
-                    .rotationEffect(.degrees(a))
-            }
-            Circle().fill(Color(white: 0.3)).frame(width: d * 0.28)
-            Capsule()
-                .fill(Color.red)
-                .frame(width: d * 0.04, height: d * 0.1)
-                .offset(y: -d / 2)
+    private func advice(_ f: ParkingModel.Fit) -> String {
+        var parts: [String] = []
+        if f.angle > 3 { parts.append(String(format: "歪了 %.1f°", f.angle)) }
+        if abs(f.offset) > 0.3 {
+            let side = game.model.layout.parallel ? (f.offset > 0 ? "太靠路边" : "离路边太远") : (f.offset > 0 ? "偏右" : "偏左")
+            parts.append(String(format: "%@ %.2f 米", side, abs(f.offset)))
         }
-        .frame(width: d, height: d)
-        .opacity(abs(angle) >= maxAngle ? 0.75 : 1)
+        return "已进库，" + parts.joined(separator: "，") + "，再调正"
     }
 }
 
-struct ParkingCanvas: View {
-    let model: ParkingModel
-    let showGuide: Bool
-    var paint = CarPaint.pearl
-    var carView = false
-    static let home = Vector(x: 12, y: 9)
-    static let visibleWidth = 19.0
+private struct Viewport: View {
+    let game: Game
+    let paint: CarPaint
 
     var body: some View {
-        Canvas { context, size in
-            let scale = carView ? size.width / 11 : min(size.width / Self.visibleWidth, size.height / 16.5)
-            let halfW = size.width / scale / 2, halfH = size.height / scale / 2
-            func follow(_ value: Double, _ home: Double, _ half: Double) -> Double {
-                let margin = half - 2.8
-                return home + max(0, abs(value - home) - margin) * (value < home ? -1 : 1)
-            }
-            let camera = carView ? Vector(x: model.pose.x, y: model.pose.y)
-                : Vector(x: follow(model.pose.x, Self.home.x, halfW), y: follow(model.pose.y, Self.home.y, halfH))
-            let center = CGPoint(x: size.width / 2, y: size.height / 2)
-            func point(_ p: Vector) -> CGPoint {
-                CGPoint(x: center.x + (p.x - camera.x) * scale,
-                        y: center.y + (p.y - camera.y) * scale)
-            }
-            func polygon(_ points: [Vector]) -> Path {
-                Path { path in
-                    path.addLines(points.map(point))
-                    path.closeSubpath()
-                }
-            }
-            func rect(_ b: Box) -> CGRect {
-                let o = point(Vector(x: b.x, y: b.y))
-                return CGRect(x: o.x, y: o.y, width: b.width * scale, height: b.height * scale)
-            }
-            func line(_ a: Vector, _ b: Vector) -> Path {
-                Path { path in
-                    path.move(to: point(a))
-                    path.addLine(to: point(b))
-                }
-            }
-
-            context.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color(red: 0.16, green: 0.19, blue: 0.17)))
-            if carView {
-                context.translateBy(x: center.x, y: center.y)
-                context.rotate(by: .radians(-.pi / 2 - model.pose.heading))
-                context.translateBy(x: -center.x, y: -center.y)
-            }
-            let l = model.layout
-            let asphalt = Color(red: 0.11, green: 0.12, blue: 0.14)
-            let lineColor = Color.white.opacity(0.85)
-            let lot = rect(Box(x: 0, y: 0, width: 24, height: 16))
-            context.fill(Path(lot), with: .color(asphalt))
-            context.stroke(Path(lot), with: .color(.yellow.opacity(0.6)), lineWidth: 3)
-            if l.rightEdge > 24 {
-                context.fill(Path(rect(Box(x: 22, y: l.aisleEdge, width: l.rightEdge - 22, height: 9 - l.aisleEdge))),
-                             with: .color(asphalt))
-                context.draw(Text("入口").font(.caption).foregroundColor(.gray), at: point(Vector(x: 25.5, y: 8.3)))
-            }
-            if l.leftEdge < 0 {
-                context.fill(Path(rect(Box(x: l.leftEdge, y: l.aisleEdge, width: 2 - l.leftEdge, height: 9 - l.aisleEdge))),
-                             with: .color(asphalt))
-                context.draw(Text("入口").font(.caption).foregroundColor(.gray), at: point(Vector(x: -1.5, y: 8.3)))
-            }
-            if l.backEdge < 15.7 {
-                context.fill(Path(rect(Box(x: 0, y: l.backEdge, width: 24, height: 16 - l.backEdge))),
-                             with: .color(Color(white: 0.32)))
-                context.stroke(line(Vector(x: 0, y: l.backEdge), Vector(x: 24, y: l.backEdge)),
-                               with: .color(.yellow.opacity(0.8)), lineWidth: 3)
-            }
-
-            context.fill(Path(rect(l.target)), with: .color(.green.opacity(0.22)))
-            for b in l.stalls {
-                var outline = Path()
-                outline.move(to: point(Vector(x: b.x, y: b.y)))
-                outline.addLine(to: point(Vector(x: b.x, y: b.y + b.height)))
-                outline.addLine(to: point(Vector(x: b.x + b.width, y: b.y + b.height)))
-                outline.addLine(to: point(Vector(x: b.x + b.width, y: b.y)))
-                context.stroke(outline, with: .color(lineColor), lineWidth: 2)
-            }
-            if l.aisleEdge > 1 {
-                let edge = l.aisleEdge
-                context.fill(Path(rect(Box(x: min(0, l.leftEdge), y: 0, width: max(24, l.rightEdge) - min(0, l.leftEdge), height: edge))),
-                             with: .color(Color(red: 0.2, green: 0.21, blue: 0.24)))
-                context.stroke(line(Vector(x: min(0, l.leftEdge), y: edge), Vector(x: max(24, l.rightEdge), y: edge)),
-                               with: .color(lineColor), lineWidth: 2)
-                for (i, x) in stride(from: 1.0, through: 21.0, by: 3.2).enumerated() {
-                    drawSedan(context, at: point(Vector(x: x + 1.6, y: edge - 2.7)), heading: .pi / 2, scale: scale,
-                              paint: Color(uiColor: ParkedPaint.row(i)))
-                }
-            } else {
-                context.stroke(line(Vector(x: 1, y: 3.5), Vector(x: 23, y: 3.5)),
-                               with: .color(.white.opacity(0.25)),
-                               style: StrokeStyle(lineWidth: 2, dash: [14, 12]))
-            }
-
-            for (i, b) in l.cars.enumerated() {
-                drawSedan(context, at: point(Vector(x: b.x + b.width / 2, y: b.y + b.height / 2)),
-                          heading: b.height > b.width ? -.pi / 2 : 0, scale: scale, paint: Color(uiColor: ParkedPaint.bay(i)),
-                          length: max(b.width, b.height), width: min(b.width, b.height))
-            }
-            for b in l.pillars {
-                context.fill(Path(rect(b)), with: .color(Color(white: 0.75)))
-                context.stroke(Path(rect(b)), with: .color(.orange), lineWidth: 2)
-            }
-
-            if showGuide && !model.won {
-                let direction = model.gear == 0 ? -1.0 : model.gear
-                let lx = direction < 0 ? -ParkingModel.length / 2 : ParkingModel.length / 2
-                for ly in [-ParkingModel.width / 2, ParkingModel.width / 2] {
-                    var track = Path()
-                    for (i, p) in ([model.pose] + model.trajectory(direction: direction)).enumerated() {
-                        let v = Vector(x: p.x + lx * cos(p.heading) - ly * sin(p.heading),
-                                       y: p.y + lx * sin(p.heading) + ly * cos(p.heading))
-                        if i == 0 { track.move(to: point(v)) } else { track.addLine(to: point(v)) }
+        let model = game.model
+        if let world = game.world {
+            DriverPanel(world: world, model: model, showGuide: game.showGuide, paint: paint)
+        } else {
+            ParkingCanvas(model: model, showGuide: game.showGuide, paint: paint)
+                .overlay(alignment: .topLeading) { GearSpeed(model: model).padding(8) }
+                .overlay(alignment: .bottomLeading) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        AlignChip(model: model)
+                        RadarChip(model: model)
                     }
-                    context.stroke(track, with: .color(.yellow.opacity(0.85)),
-                                   style: StrokeStyle(lineWidth: 2, dash: [6, 5]))
+                    .padding(8)
                 }
-            }
-
-            let p = model.pose
-            drawSedan(context, at: point(Vector(x: p.x, y: p.y)), heading: p.heading, scale: scale,
-                      paint: paint.color, steering: model.steering, reversing: model.gear < 0,
-                      outline: model.won ? .green : model.collision ? .red : nil)
         }
-        .accessibilityLabel("倒车入库俯视练习场")
     }
 }
